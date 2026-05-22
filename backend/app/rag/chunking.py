@@ -1,6 +1,6 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-def chunk_documents(pages):
+def chunk_documents(pages, filename):
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
@@ -16,7 +16,8 @@ def chunk_documents(pages):
         for chunk in split_texts:
             chunks.append({
                 "page": page["page"],
-                "text": chunk
+                "text": chunk,
+                "document": filename
             })
 
     return chunks

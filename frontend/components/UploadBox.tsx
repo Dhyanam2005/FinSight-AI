@@ -4,52 +4,68 @@ import { useState } from "react";
 import API from "@/lib/api";
 
 export default function UploadBox() {
+
   const [loading, setLoading] = useState(false);
 
   const handleUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const files = e.target.files;
+
+    if (!files || files.length === 0) return;
 
     try {
+
       setLoading(true);
 
-      await API.post("/upload", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      // Upload all selected PDFs
+      for (let i = 0; i < files.length; i++) {
 
-      alert("Upload successful!");
+        const formData = new FormData();
+
+        formData.append("file", files[i]);
+
+        await API.post("/upload", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      }
+
+      alert("All PDFs uploaded successfully!");
+
     } catch (err) {
+
       console.error(err);
       alert("Upload failed");
+
     } finally {
+
       setLoading(false);
     }
   };
 
   return (
     <div className="border rounded-2xl p-6 shadow-sm bg-white">
+
       <h2 className="text-xl font-semibold mb-4">
-        Upload Financial Document
+        Upload Financial Documents
       </h2>
 
       <input
         type="file"
         accept=".pdf"
+        multiple
         onChange={handleUpload}
       />
 
       {loading && (
         <p className="mt-2 text-sm text-gray-500">
-          Processing PDF...
+          Processing PDFs...
         </p>
       )}
+
     </div>
   );
 }

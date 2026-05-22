@@ -5,7 +5,6 @@ import google.generativeai as genai
 import os
 
 import app.store as store
-from app.rag.retriever import retrieve_chunks
 
 load_dotenv()
 
@@ -15,8 +14,10 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 
 router = APIRouter()
 
+
 class QueryRequest(BaseModel):
     question: str
+
 
 @router.post("/ask")
 async def ask_question(req: QueryRequest):
@@ -26,29 +27,45 @@ async def ask_question(req: QueryRequest):
         k=4
     )
 
-    context = "\n\n".join(
-        [doc.page_content for doc in docs]
-    )
+    # Build multi-document context
+    context = ""
 
+    for doc in docs:
+
+        context += f"""
+Document: {doc.metadata.get('document', 'Unknown')}
+Page: {doc.metadata.get('page', 'N/A')}
+
+Content:
+{doc.page_content}
+
+"""
+
+    # Prompt
     prompt = f"""
-    Answer ONLY using the provided context.
+Answer ONLY using the provided context.
 
-    Context:
-    {context}
+If multiple documents are provided, compare and synthesize information across them.
 
-    Question:
-    {req.question}
-    """
+Context:
+{context}
+
+Question:
+{req.question}
+"""
 
     response = model.generate_content(prompt)
 
+    # Source citations
     sources = []
 
     for idx, doc in enumerate(docs):
+
         sources.append({
             "text": doc.page_content[:200],
             "chunk": idx + 1,
-            "page": doc.metadata.get("page", "N/A")
+            "page": doc.metadata.get("page", "N/A"),
+            "document": doc.metadata.get("document", "Unknown")
         })
 
     return {

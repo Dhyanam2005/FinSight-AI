@@ -12,6 +12,7 @@ router = APIRouter()
 
 UPLOAD_DIR = "uploads"
 
+
 @router.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
 
@@ -20,11 +21,23 @@ async def upload_pdf(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # Extract pages
     pages = extract_text_from_pdf(file_path)
 
-    chunks = chunk_documents(pages)
+    # Create chunks with metadata
+    chunks = chunk_documents(
+        pages,
+        file.filename
+    )
 
-    store.vector_db = create_vector_store(chunks)
+    # Create vector store for this document
+    new_vector_store = create_vector_store(chunks)
+
+    # Merge with existing vector store
+    if store.vector_db is None:
+        store.vector_db = new_vector_store
+    else:
+        store.vector_db.merge_from(new_vector_store)
 
     return {
         "filename": file.filename,
