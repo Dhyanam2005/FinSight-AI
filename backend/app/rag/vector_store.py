@@ -10,7 +10,9 @@ def create_vector_store(chunks):
     texts = [chunk["text"] for chunk in chunks]
 
     metadatas = [
-        {"page": chunk["page"]}
+        {
+            "page": chunk["page"]
+        }
         for chunk in chunks
     ]
 

@@ -27,11 +27,19 @@ async def ask_question(request: QueryRequest):
     docs = retrieve_chunks(store.vector_db, request.question)
 
     context = "\n\n".join([
-        doc.page_content for doc in docs
+        f"Page {doc.metadata['page']}:\n{doc.page_content}"
+        for doc in docs
     ])
 
     prompt = f"""
+    You are a financial research assistant.
+
     Answer the question using ONLY the provided context.
+
+    When answering:
+    - Mention relevant page numbers
+    - Cite sources like (Page 3)
+    - If answer is not in context, say you don't know
 
     Context:
     {context}
@@ -42,7 +50,17 @@ async def ask_question(request: QueryRequest):
 
     response = model.generate_content(prompt)
 
+    answer = response.text
+
+    citations = []
+
+    for doc in docs:
+        citations.append({
+            "page": doc.metadata["page"]
+        })
+
     return {
         "question": request.question,
-        "answer": response.text
+        "answer": answer,
+        "citations": citations
     }
