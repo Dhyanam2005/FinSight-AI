@@ -6,16 +6,14 @@ from app.utils.pdf_parser import extract_text_from_pdf
 from app.rag.chunking import chunk_documents
 from app.rag.vector_store import create_vector_store
 
+import app.store as store
+
 router = APIRouter()
 
 UPLOAD_DIR = "uploads"
 
-vector_db = None
-
 @router.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-
-    global vector_db
 
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
@@ -26,7 +24,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     chunks = chunk_documents(pages)
 
-    vector_db = create_vector_store(chunks)
+    store.vector_db = create_vector_store(chunks)
 
     return {
         "filename": file.filename,
