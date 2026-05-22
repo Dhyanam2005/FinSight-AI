@@ -1,31 +1,42 @@
-from app.rag.vector_store import search_similar_chunks
+from app.rag.vector_store import search_faiss
 from app.rag.bm25_store import search_bm25
+from app.rag.reranker import rerank_chunks
 
 
-def hybrid_search(query, k=4):
+def hybrid_search(query, top_k=5):
 
-    faiss_results = search_similar_chunks(query, k=k)
+    # Retrieve from FAISS
+    faiss_results = search_faiss(
+        query=query,
+        k=10
+    )
 
-    bm25_results = search_bm25(query, k=k)
-    print("FAISS Results:")
-    print(faiss_results)
-    print("BM25 Results:")
-    print(bm25_results)
-    combined = faiss_results + bm25_results
+    # Retrieve from BM25
+    bm25_results = search_bm25(
+        query=query,
+        k=10
+    )
+
+    # Merge results
+    combined_results = faiss_results + bm25_results
 
     # Remove duplicates
     unique_results = []
-
     seen = set()
 
-    for chunk in combined:
+    for chunk in combined_results:
 
-        text = chunk["text"]
+        content = chunk.page_content
 
-        if text not in seen:
-
-            seen.add(text)
-
+        if content not in seen:
+            seen.add(content)
             unique_results.append(chunk)
 
-    return unique_results[:k]
+    # Rerank chunks
+    reranked_results = rerank_chunks(
+        query=query,
+        chunks=unique_results,
+        top_k=top_k
+    )
+
+    return reranked_results
