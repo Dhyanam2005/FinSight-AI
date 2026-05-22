@@ -4,12 +4,13 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import os
 
-import app.store as store
+from app.rag.hybrid_retriever import hybrid_search
 
 load_dotenv()
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+# Recommended model for free tier
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 router = APIRouter()
@@ -22,10 +23,14 @@ class QueryRequest(BaseModel):
 @router.post("/ask")
 async def ask_question(req: QueryRequest):
 
-    docs = store.vector_db.similarity_search(
+    # Hybrid retrieval (FAISS + BM25)
+    docs = hybrid_search(
         req.question,
         k=4
     )
+
+    print("Retrieved Docs:")
+    print(docs)
 
     # Build multi-document context
     context = ""
@@ -33,11 +38,11 @@ async def ask_question(req: QueryRequest):
     for doc in docs:
 
         context += f"""
-Document: {doc.metadata.get('document', 'Unknown')}
-Page: {doc.metadata.get('page', 'N/A')}
+Document: {doc['document']}
+Page: {doc['page']}
 
 Content:
-{doc.page_content}
+{doc['text']}
 
 """
 
@@ -54,6 +59,7 @@ Question:
 {req.question}
 """
 
+    # Gemini response
     response = model.generate_content(prompt)
 
     # Source citations
@@ -62,10 +68,10 @@ Question:
     for idx, doc in enumerate(docs):
 
         sources.append({
-            "text": doc.page_content[:200],
+            "text": doc["text"][:200],
             "chunk": idx + 1,
-            "page": doc.metadata.get("page", "N/A"),
-            "document": doc.metadata.get("document", "Unknown")
+            "page": doc["page"],
+            "document": doc["document"]
         })
 
     return {

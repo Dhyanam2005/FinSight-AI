@@ -3,7 +3,7 @@ import google.generativeai as genai
 import os
 import json
 
-from app.rag.vector_store import search_similar_chunks
+from app.rag.hybrid_retriever import hybrid_search
 
 router = APIRouter()
 
@@ -26,8 +26,11 @@ async def websocket_chat(websocket: WebSocket):
             # Receive question from frontend
             question = await websocket.receive_text()
 
-            # Retrieve relevant chunks
-            chunks = search_similar_chunks(question)
+            # Hybrid retrieval
+            chunks = hybrid_search(
+                question,
+                k=4
+            )
 
             print("Retrieved Chunks:")
             print(chunks)
@@ -88,7 +91,6 @@ Question:
 
         print("WebSocket Error:", e)
 
-        # Send error to frontend instead of crashing silently
         await websocket.send_text(
             json.dumps({
                 "type": "error",
