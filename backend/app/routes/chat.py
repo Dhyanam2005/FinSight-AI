@@ -19,48 +19,39 @@ class QueryRequest(BaseModel):
     question: str
 
 @router.post("/ask")
-async def ask_question(request: QueryRequest):
+async def ask_question(req: QueryRequest):
 
-    if store.vector_db is None:
-        return {"error": "No PDF uploaded yet"}
+    docs = store.vector_db.similarity_search(
+        req.question,
+        k=4
+    )
 
-    docs = retrieve_chunks(store.vector_db, request.question)
-
-    context = "\n\n".join([
-        f"Page {doc.metadata['page']}:\n{doc.page_content}"
-        for doc in docs
-    ])
+    context = "\n\n".join(
+        [doc.page_content for doc in docs]
+    )
 
     prompt = f"""
-    You are a financial research assistant.
-
-    Answer the question using ONLY the provided context.
-
-    When answering:
-    - Mention relevant page numbers
-    - Cite sources like (Page 3)
-    - If answer is not in context, say you don't know
+    Answer ONLY using the provided context.
 
     Context:
     {context}
 
     Question:
-    {request.question}
+    {req.question}
     """
 
     response = model.generate_content(prompt)
 
-    answer = response.text
+    sources = []
 
-    citations = []
-
-    for doc in docs:
-        citations.append({
-            "page": doc.metadata["page"]
+    for idx, doc in enumerate(docs):
+        sources.append({
+            "text": doc.page_content[:200],
+            "chunk": idx + 1,
+            "page": doc.metadata.get("page", "N/A")
         })
 
     return {
-        "question": request.question,
-        "answer": answer,
-        "citations": citations
+        "answer": response.text,
+        "sources": sources
     }
