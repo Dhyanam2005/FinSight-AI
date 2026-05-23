@@ -18,7 +18,8 @@ def create_vector_store(chunks):
             "document": chunk["document"],
             "company": chunk["company"],
             "quarter": chunk["quarter"],
-            "report_type": chunk["report_type"]
+            "report_type": chunk["report_type"],
+            "section": chunk["section"]
         }
         for chunk in chunks
     ]

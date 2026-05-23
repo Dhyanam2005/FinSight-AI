@@ -45,6 +45,58 @@ def extract_report_type(filename):
     return "Unknown"
 
 
+def detect_section(text):
+
+    text = text.lower()
+
+    section_keywords = {
+
+        "Risk Factors": [
+            "risk",
+            "uncertainty",
+            "supply chain",
+            "volatility"
+        ],
+
+        "Revenue": [
+            "revenue",
+            "sales",
+            "growth",
+            "income"
+        ],
+
+        "Guidance": [
+            "guidance",
+            "forecast",
+            "outlook",
+            "projection"
+        ],
+
+        "AI Strategy": [
+            "artificial intelligence",
+            "ai",
+            "machine learning",
+            "automation"
+        ],
+
+        "Electric Vehicles": [
+            "electric vehicle",
+            "ev",
+            "battery",
+            "autonomous"
+        ]
+    }
+
+    for section, keywords in section_keywords.items():
+
+        for keyword in keywords:
+
+            if keyword in text:
+                return section
+
+    return "General"
+
+
 def chunk_documents(pages, filename):
 
     splitter = RecursiveCharacterTextSplitter(
@@ -65,13 +117,17 @@ def chunk_documents(pages, filename):
 
         for chunk in split_texts:
 
+            # Detect section
+            section = detect_section(chunk)
+
             chunks.append({
                 "page": page["page"],
                 "text": chunk,
                 "document": filename,
                 "company": company,
                 "quarter": quarter,
-                "report_type": report_type
+                "report_type": report_type,
+                "section": section
             })
 
     return chunks

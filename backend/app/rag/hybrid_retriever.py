@@ -7,7 +7,7 @@ from app.rag.query_rewriter import rewrite_query
 import re
 
 
-def extract_company_filter(query):
+def extract_company_filters(query):
 
     companies = [
         "tesla",
@@ -19,12 +19,14 @@ def extract_company_filter(query):
 
     query = query.lower()
 
+    matched_companies = []
+
     for company in companies:
 
         if company in query:
-            return company.title()
+            matched_companies.append(company.title())
 
-    return None
+    return matched_companies
 
 
 def extract_report_type_filter(query):
@@ -38,6 +40,35 @@ def extract_report_type_filter(query):
         return "Annual Report"
 
     return None
+
+
+def extract_section_filters(query):
+
+    query = query.lower()
+
+    sections = []
+
+    if "risk" in query:
+        sections.append("Risk Factors")
+
+    if "revenue" in query:
+        sections.append("Revenue")
+
+    if "guidance" in query:
+        sections.append("Guidance")
+
+    if "ai" in query:
+        sections.append("AI Strategy")
+
+    if (
+        "ev" in query
+        or "battery" in query
+        or "electric" in query
+        or "autonomous" in query
+    ):
+        sections.append("Electric Vehicles")
+
+    return sections
 
 
 def hybrid_search(query, top_k=5):
@@ -54,15 +85,20 @@ def hybrid_search(query, top_k=5):
     print(rewritten_query)
 
     # Extract metadata filters
-    company_filter = extract_company_filter(query)
+    company_filters = extract_company_filters(query)
 
     report_filter = extract_report_type_filter(query)
 
-    print("\nCompany Filter:")
-    print(company_filter)
+    section_filters = extract_section_filters(query)
+
+    print("\nCompany Filters:")
+    print(company_filters)
 
     print("\nReport Type Filter:")
     print(report_filter)
+
+    print("\nSection Filters:")
+    print(section_filters)
 
     # Retrieve from FAISS
     faiss_results = search_faiss(
@@ -86,16 +122,22 @@ def hybrid_search(query, top_k=5):
 
         metadata = chunk.metadata
 
-        # Company filter
-        if company_filter:
+        # Multi-company filtering
+        if company_filters:
 
-            if metadata.get("company") != company_filter:
+            if metadata.get("company") not in company_filters:
                 continue
 
-        # Report type filter
+        # Report type filtering
         if report_filter:
 
             if metadata.get("report_type") != report_filter:
+                continue
+
+        # Multi-section filtering
+        if section_filters:
+
+            if metadata.get("section") not in section_filters:
                 continue
 
         filtered_results.append(chunk)
