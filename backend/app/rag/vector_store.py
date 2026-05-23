@@ -15,7 +15,10 @@ def create_vector_store(chunks):
     metadatas = [
         {
             "page": chunk["page"],
-            "document": chunk["document"]
+            "document": chunk["document"],
+            "company": chunk["company"],
+            "quarter": chunk["quarter"],
+            "report_type": chunk["report_type"]
         }
         for chunk in chunks
     ]

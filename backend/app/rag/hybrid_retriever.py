@@ -4,10 +4,47 @@ from app.rag.reranker import rerank_chunks
 from app.rag.context_compressor import compress_context
 from app.rag.query_rewriter import rewrite_query
 
+import re
+
+
+def extract_company_filter(query):
+
+    companies = [
+        "tesla",
+        "nvidia",
+        "amd",
+        "bmw",
+        "mercedes"
+    ]
+
+    query = query.lower()
+
+    for company in companies:
+
+        if company in query:
+            return company.title()
+
+    return None
+
+
+def extract_report_type_filter(query):
+
+    query = query.lower()
+
+    if "earnings" in query:
+        return "Earnings Call"
+
+    if "annual" in query:
+        return "Annual Report"
+
+    return None
+
+
 def hybrid_search(query, top_k=5):
 
     original_query = query
 
+    # Rewrite query
     rewritten_query = rewrite_query(query)
 
     print("\nOriginal Query:")
@@ -15,6 +52,18 @@ def hybrid_search(query, top_k=5):
 
     print("\nRewritten Query:")
     print(rewritten_query)
+
+    # Extract metadata filters
+    company_filter = extract_company_filter(query)
+
+    report_filter = extract_report_type_filter(query)
+
+    print("\nCompany Filter:")
+    print(company_filter)
+
+    print("\nReport Type Filter:")
+    print(report_filter)
+
     # Retrieve from FAISS
     faiss_results = search_faiss(
         query=rewritten_query,
@@ -29,6 +78,30 @@ def hybrid_search(query, top_k=5):
 
     # Merge results
     combined_results = faiss_results + bm25_results
+
+    # Apply metadata filtering
+    filtered_results = []
+
+    for chunk in combined_results:
+
+        metadata = chunk.metadata
+
+        # Company filter
+        if company_filter:
+
+            if metadata.get("company") != company_filter:
+                continue
+
+        # Report type filter
+        if report_filter:
+
+            if metadata.get("report_type") != report_filter:
+                continue
+
+        filtered_results.append(chunk)
+
+    # Use filtered results
+    combined_results = filtered_results
 
     # Remove duplicates
     unique_results = []
@@ -61,10 +134,11 @@ def hybrid_search(query, top_k=5):
         chunks=chunk_texts
     )
 
-    # TEMP DEBUG
+    # Debug compressed context
     print("\n===== COMPRESSED CONTEXT =====")
 
     for chunk in compressed_chunks:
+
         print(chunk)
         print("\n----------------------\n")
 
@@ -73,5 +147,5 @@ def hybrid_search(query, top_k=5):
 
         chunk.page_content = compressed_chunks[i]
 
-    # Return Document objects
+    # Return final compressed documents
     return reranked_results
