@@ -1,44 +1,147 @@
 from fastapi import APIRouter
+
 from pydantic import BaseModel
+
 from dotenv import load_dotenv
+
 import google.generativeai as genai
+
 import os
 
 from app.rag.hybrid_retriever import hybrid_search
 
+from app.extraction.comparison_engine import (
+    compare_companies
+)
+
+
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
 
-# Recommended model for free tier
-model = genai.GenerativeModel("gemini-2.5-flash")
+model = genai.GenerativeModel(
+    "gemini-2.5-flash"
+)
 
 router = APIRouter()
 
 
 class QueryRequest(BaseModel):
+
     question: str
+
+
+def is_comparison_query(question):
+
+    question = question.lower()
+
+    comparison_keywords = [
+
+        "compare",
+
+        "vs",
+
+        "versus",
+
+        "difference between"
+
+    ]
+
+    return any(
+        keyword in question
+        for keyword in comparison_keywords
+    )
+
+
+def extract_company_names(question):
+
+    companies = [
+
+        "bmw",
+
+        "mercedes",
+
+        "tesla",
+
+        "nvidia",
+
+        "apple",
+
+        "google"
+
+    ]
+
+    found = []
+
+    question_lower = question.lower()
+
+    for company in companies:
+
+        if company in question_lower:
+
+            found.append(company.title())
+
+    return found
 
 
 @router.post("/ask")
 async def ask_question(req: QueryRequest):
 
-    # Hybrid retrieval (FAISS + BM25)
+    # ====================================
+    # COMPARISON ENGINE ROUTING
+    # ====================================
+
+    if is_comparison_query(req.question):
+
+        companies = extract_company_names(
+            req.question
+        )
+
+        if len(companies) >= 2:
+
+            comparison_result = compare_companies(
+
+                companies[0],
+
+                companies[1]
+
+            )
+
+            return {
+
+                "answer": comparison_result,
+
+                "sources": [],
+
+                "mode": "structured_comparison"
+            }
+
+    # ====================================
+    # NORMAL RAG PIPELINE
+    # ====================================
+
     docs = hybrid_search(
+
         req.question,
+
         top_k=4
     )
 
-    print("Retrieved Docs:")
+    print("\n===== RETRIEVED DOCS =====\n")
+
     print(docs)
 
-    # Build multi-document context
+    # Build context
     context = ""
 
     for doc in docs:
 
         context += f"""
+
 Document: {doc['document']}
+
 Page: {doc['page']}
 
 Content:
@@ -46,21 +149,28 @@ Content:
 
 """
 
-    # Prompt
     prompt = f"""
-Answer ONLY using the provided context.
+    You are a financial analyst assistant.
 
-If multiple documents are provided, compare and synthesize information across them.
+    Answer ONLY using the provided context.
 
-Context:
-{context}
+    If multiple documents are retrieved:
+    - compare companies carefully
+    - synthesize insights
+    - identify risks
+    - identify opportunities
+    - summarize financial performance
 
-Question:
-{req.question}
-"""
+    CONTEXT:
+    {context}
 
-    # Gemini response
-    response = model.generate_content(prompt)
+    QUESTION:
+    {req.question}
+    """
+
+    response = model.generate_content(
+        prompt
+    )
 
     # Source citations
     sources = []
@@ -68,13 +178,21 @@ Question:
     for idx, doc in enumerate(docs):
 
         sources.append({
+
             "text": doc["text"][:200],
+
             "chunk": idx + 1,
+
             "page": doc["page"],
+
             "document": doc["document"]
         })
 
     return {
+
         "answer": response.text,
-        "sources": sources
+
+        "sources": sources,
+
+        "mode": "rag"
     }
