@@ -38,26 +38,39 @@ async def upload_pdf(file: UploadFile = File(...)):
             buffer
         )
 
-    # Extract pages
+    # ====================================
+    # PDF PARSING
+    # ====================================
+
     pages = extract_text_from_pdf(
         file_path
     )
 
-    # Create chunks with metadata
+    # ====================================
+    # CHUNKING + METADATA
+    # ====================================
+
     chunks = chunk_documents(
         pages,
         file.filename
     )
 
-    # Create vector store
+    # ====================================
+    # VECTOR STORE
+    # ====================================
+
     new_vector_store = create_vector_store(
         chunks
     )
 
-    # Create BM25 store
-    create_bm25_store(chunks)
+    create_bm25_store(
+        chunks
+    )
 
-    # Merge with existing vector store
+    # ====================================
+    # MERGE VECTOR DB
+    # ====================================
+
     if store.vector_db is None:
 
         store.vector_db = new_vector_store
@@ -68,59 +81,103 @@ async def upload_pdf(file: UploadFile = File(...)):
             new_vector_store
         )
 
-    # =========================
-    # STRUCTURED EXTRACTION
-    # =========================
+    # ====================================
+    # STRUCTURED FINANCIAL EXTRACTION
+    # ====================================
 
     extracted_count = 0
 
     for chunk in chunks:
 
-        print(chunk)
-
-        # chunk is a DICTIONARY
         section = chunk.get(
             "section",
             ""
         )
 
-        # Only analyze important sections
+        # Only extract important finance sections
         if section in [
 
             "Revenue",
+
             "Risk Factors",
+
             "Guidance",
+
             "Electric Vehicles",
+
             "AI Strategy"
 
         ]:
 
             extracted_data = extract_financial_data(
 
-                # chunk is dict
                 chunk["text"],
 
-                # pass metadata dict
                 {
-                    "company": chunk["company"],
-                    "quarter": chunk["quarter"],
-                    "report_type": chunk["report_type"],
-                    "section": chunk["section"],
-                    "document": chunk["document"],
-                    "page": chunk["page"]
+
+                    "company": chunk.get(
+                        "company",
+                        "Unknown"
+                    ),
+
+                    "quarter": chunk.get(
+                        "quarter",
+                        "Unknown"
+                    ),
+
+                    "report_type": chunk.get(
+                        "report_type",
+                        "Unknown"
+                    ),
+
+                    "section": chunk.get(
+                        "section",
+                        "Unknown"
+                    ),
+
+                    "document": chunk.get(
+                        "document",
+                        "Unknown"
+                    ),
+
+                    "page": chunk.get(
+                        "page",
+                        "Unknown"
+                    )
                 }
             )
 
             if extracted_data:
 
+                # Store structured finance data
                 store.structured_financial_data.append(
                     extracted_data
                 )
 
+                # Dynamically register companies
+                store.uploaded_companies.add(
+
+                    extracted_data["company"]
+
+                )
+
                 extracted_count += 1
 
+    # ====================================
+    # DEBUG LOGGING
+    # ====================================
+
     print("\n===== STRUCTURED FINANCIAL DATA =====")
+
     print(store.structured_financial_data)
+
+    print("\n===== UPLOADED COMPANIES =====")
+
+    print(store.uploaded_companies)
+
+    # ====================================
+    # RESPONSE
+    # ====================================
 
     return {
 
@@ -131,6 +188,10 @@ async def upload_pdf(file: UploadFile = File(...)):
         "num_chunks": len(chunks),
 
         "structured_extractions": extracted_count,
+
+        "uploaded_companies": list(
+            store.uploaded_companies
+        ),
 
         "message": "PDF processed successfully"
     }

@@ -14,6 +14,10 @@ from app.extraction.comparison_engine import (
     compare_companies
 )
 
+from app.extraction.report_generator import (
+    generate_analyst_report
+)
+
 
 load_dotenv()
 
@@ -32,6 +36,10 @@ class QueryRequest(BaseModel):
 
     question: str
 
+
+# ====================================
+# QUERY TYPE DETECTION
+# ====================================
 
 def is_comparison_query(question):
 
@@ -54,6 +62,32 @@ def is_comparison_query(question):
         for keyword in comparison_keywords
     )
 
+
+def is_report_query(question):
+
+    question = question.lower()
+
+    report_keywords = [
+
+        "analyst report",
+
+        "equity report",
+
+        "research report",
+
+        "generate report"
+
+    ]
+
+    return any(
+        keyword in question
+        for keyword in report_keywords
+    )
+
+
+# ====================================
+# COMPANY EXTRACTION
+# ====================================
 
 def extract_company_names(question):
 
@@ -90,7 +124,7 @@ def extract_company_names(question):
 async def ask_question(req: QueryRequest):
 
     # ====================================
-    # COMPARISON ENGINE ROUTING
+    # STRUCTURED COMPARISON ROUTING
     # ====================================
 
     if is_comparison_query(req.question):
@@ -116,6 +150,31 @@ async def ask_question(req: QueryRequest):
                 "sources": [],
 
                 "mode": "structured_comparison"
+            }
+
+    # ====================================
+    # ANALYST REPORT ROUTING
+    # ====================================
+
+    if is_report_query(req.question):
+
+        companies = extract_company_names(
+            req.question
+        )
+
+        if len(companies) >= 1:
+
+            report = generate_analyst_report(
+                companies[0]
+            )
+
+            return {
+
+                "answer": report,
+
+                "sources": [],
+
+                "mode": "analyst_report"
             }
 
     # ====================================
