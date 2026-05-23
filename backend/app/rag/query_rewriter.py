@@ -1,50 +1,41 @@
-FINANCIAL_QUERY_MAP = {
-
-    "risks": (
-        "financial risks operational risks "
-        "supply chain risks market risks"
-    ),
-
-    "growth": (
-        "revenue growth business growth "
-        "sales growth expansion"
-    ),
-
-    "margins": (
-        "profit margins operating margins "
-        "gross margins margin guidance"
-    ),
-
-    "guidance": (
-        "financial guidance future outlook "
-        "forecast projections"
-    ),
-
-    "ai": (
-        "AI investments artificial intelligence strategy "
-        "AI infrastructure"
-    ),
-
-    "revenue": (
-        "revenue growth revenue performance "
-        "sales performance"
-    )
-}
+from app.services.gemini_service import model
 
 
 def rewrite_query(query):
 
-    rewritten_query = query.lower()
+    prompt = f"""
+    You are a financial AI assistant.
 
-    expansions = []
+    Rewrite the user's query into a more
+    detailed financial search query
+    optimized for retrieval.
 
-    for keyword, expansion in FINANCIAL_QUERY_MAP.items():
+    Rules:
+    - Preserve original meaning
+    - Add relevant financial terminology
+    - Expand abbreviations if needed
+    - Keep it concise
+    - Output ONLY the rewritten query
 
-        if keyword in rewritten_query:
-            expansions.append(expansion)
+    User Query:
+    {query}
+    """
 
-    if expansions:
+    try:
 
-        rewritten_query += " " + " ".join(expansions)
+        response = model.generate_content(
+            prompt
+        )
 
-    return rewritten_query
+        rewritten_query = response.text.strip()
+
+        return rewritten_query
+
+    except Exception as e:
+
+        print(
+            "Query Rewrite Error:",
+            e
+        )
+
+        return query

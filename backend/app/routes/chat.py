@@ -5,6 +5,9 @@ import google.generativeai as genai
 import os
 
 from app.rag.hybrid_retriever import hybrid_search
+from app.rag.query_rewriter import (
+    rewrite_query
+)
 from app.extraction.comparison_engine import compare_companies
 from app.extraction.report_generator import generate_analyst_report
 
@@ -108,10 +111,45 @@ async def ask_question(req: QueryRequest):
     print(get_memory())
 
     # For multi-company queries, retrieve more docs so both companies are covered
+# For multi-company queries, retrieve more docs so both companies are covered
     top_k = 6 if len(companies) >= 2 else 4
 
-    enhanced = enrich_query(query)
-    docs = hybrid_search(enhanced, top_k=top_k)
+    # ====================================
+    # QUERY REWRITING
+    # ====================================
+
+    rewritten_query = rewrite_query(
+        query
+    )
+
+    print("\n===== ORIGINAL QUERY =====")
+
+    print(query)
+
+    print("\n===== REWRITTEN QUERY =====")
+
+    print(rewritten_query)
+
+    # ====================================
+    # MEMORY ENRICHMENT
+    # ====================================
+
+    enhanced = enrich_query(
+        rewritten_query
+    )
+
+    print("\n===== ENHANCED QUERY =====")
+
+    print(enhanced)
+
+    # ====================================
+    # HYBRID SEARCH
+    # ====================================
+
+    docs = hybrid_search(
+        enhanced,
+        top_k=top_k
+    )
 
     # If comparing two companies, verify we have docs for each and
     # top up with individual searches if one is missing
@@ -124,12 +162,32 @@ async def ask_question(req: QueryRequest):
             docs.extend(extra)
 
     print("\n===== RETRIEVED DOCS =====")
+
     for d in docs:
-        print(f"  [{d.get('document', '?')} p{d.get('page', '?')}]")
+
+        print(
+
+            f"  [{d.metadata.get('document', '?')} "
+
+            f"p{d.metadata.get('page', '?')}]"
+        )
 
     context = ""
+
     for doc in docs:
-        context += f"\nDocument: {doc['document']}\nPage: {doc['page']}\n\n{doc['text']}\n"
+
+        context += (
+
+            f"\nDocument: "
+
+            f"{doc.metadata.get('document', '?')}\n"
+
+            f"Page: "
+
+            f"{doc.metadata.get('page', '?')}\n\n"
+
+            f"{doc.page_content}\n"
+        )
 
     prompt = f"""You are a financial analyst assistant.
 
@@ -148,12 +206,24 @@ QUESTION:
     response = model.generate_content(prompt)
 
     sources = [
+
         {
-            "text": doc["text"][:200],
+
+            "text": doc.page_content[:200],
+
             "chunk": idx + 1,
-            "page": doc["page"],
-            "document": doc["document"],
+
+            "page": doc.metadata.get(
+                "page",
+                "?"
+            ),
+
+            "document": doc.metadata.get(
+                "document",
+                "?"
+            ),
         }
+
         for idx, doc in enumerate(docs)
     ]
 
