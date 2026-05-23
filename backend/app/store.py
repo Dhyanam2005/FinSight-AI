@@ -1,5 +1,6 @@
 vector_db = None
 structured_financial_data = []
+financial_sentiments = []   
 uploaded_companies = set()
 def get_company_financials(company):
 

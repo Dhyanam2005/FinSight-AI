@@ -39,12 +39,20 @@ async def upload_pdf(file: UploadFile = File(...)):
         )
 
     # ====================================
-    # PDF PARSING
+    # PDF PARSING + SENTIMENT
     # ====================================
 
-    pages = extract_text_from_pdf(
+    result = extract_text_from_pdf(
         file_path
     )
+
+    pages = result["pages"]
+
+    sentiment = result["sentiment"]
+
+    print("\n===== FINBERT SENTIMENT =====")
+
+    print(sentiment)
 
     # ====================================
     # CHUNKING + METADATA
@@ -87,11 +95,25 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     extracted_count = 0
 
+    company_name = "Unknown"
+
+    quarter_name = "Unknown"
+
     for chunk in chunks:
 
         section = chunk.get(
             "section",
             ""
+        )
+
+        company_name = chunk.get(
+            "company",
+            "Unknown"
+        )
+
+        quarter_name = chunk.get(
+            "quarter",
+            "Unknown"
         )
 
         # Only extract important finance sections
@@ -115,15 +137,9 @@ async def upload_pdf(file: UploadFile = File(...)):
 
                 {
 
-                    "company": chunk.get(
-                        "company",
-                        "Unknown"
-                    ),
+                    "company": company_name,
 
-                    "quarter": chunk.get(
-                        "quarter",
-                        "Unknown"
-                    ),
+                    "quarter": quarter_name,
 
                     "report_type": chunk.get(
                         "report_type",
@@ -156,12 +172,28 @@ async def upload_pdf(file: UploadFile = File(...)):
 
                 # Dynamically register companies
                 store.uploaded_companies.add(
-
                     extracted_data["company"]
-
                 )
 
                 extracted_count += 1
+
+    # ====================================
+    # STORE FINANCIAL SENTIMENT
+    # ====================================
+
+    store.financial_sentiments.append({
+
+        "company": company_name,
+
+        "quarter": quarter_name,
+
+        "sentiment": sentiment["sentiment"],
+
+        "score": sentiment["score"],
+
+        "tone": sentiment["tone"]
+
+    })
 
     # ====================================
     # DEBUG LOGGING
@@ -170,6 +202,10 @@ async def upload_pdf(file: UploadFile = File(...)):
     print("\n===== STRUCTURED FINANCIAL DATA =====")
 
     print(store.structured_financial_data)
+
+    print("\n===== FINANCIAL SENTIMENTS =====")
+
+    print(store.financial_sentiments)
 
     print("\n===== UPLOADED COMPANIES =====")
 
@@ -192,6 +228,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         "uploaded_companies": list(
             store.uploaded_companies
         ),
+
+        "sentiment": sentiment,
 
         "message": "PDF processed successfully"
     }

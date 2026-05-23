@@ -1,94 +1,56 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
-
-interface FinancialData {
-
-  company: string;
-
-  quarter: string;
-
-  section: string;
-
-  revenue: string;
-
-  revenue_growth_yoy: string;
-
-  gross_margin: string;
-
-  operating_margin: string;
-
-  net_income: string;
-
-  eps: string;
-
-  ebitda: string;
-
-  guidance: string;
-
-  key_risks: string[];
-
-  key_opportunities: string[];
-
-  strategic_highlights: string[];
+interface KPIData {
+  total_companies: number;
+  total_reports: number;
+  avg_revenue_growth: number;
+  avg_operating_margin: number;
 }
 
-interface CompanyScore {
-
+interface ComparisonRow {
   company: string;
-
-  growth_score: number;
-
-  risk_score: number;
-
-  innovation_score: number;
-
-  overall_score: number;
+  quarter: string;
+  revenue_growth: number;
+  operating_margin: number;
+  net_income_growth: number;
+  investment_score: number;
 }
 
 interface TrendPoint {
-
   quarter: string;
+  revenue_growth: number;
+  operating_margin: number;
+}
 
-  revenue_growth: string;
-
-  operating_margin: string;
+interface SentimentData {
+  company: string;
+  quarter: string;
+  sentiment: string;
+  score: number;
+  tone: string;
 }
 
 export default function DashboardPage() {
 
-  const [companies, setCompanies] =
-    useState<string[]>([]);
+  const [kpis, setKpis] =
+    useState<KPIData | null>(null);
 
-  const [financialData, setFinancialData] =
-    useState<FinancialData[]>([]);
-
-  const [analystInsights, setAnalystInsights] =
-    useState("");
-
-  const [scores, setScores] =
-    useState<CompanyScore[]>([]);
+  const [comparisonData, setComparisonData] =
+    useState<ComparisonRow[]>([]);
 
   const [trendData, setTrendData] =
     useState<Record<string, TrendPoint[]>>({});
+
+  const [sentiments, setSentiments] =
+    useState<SentimentData[]>([]);
 
   const [loading, setLoading] =
     useState(true);
 
   useEffect(() => {
-
     fetchDashboard();
-
   }, []);
 
   async function fetchDashboard() {
@@ -96,76 +58,62 @@ export default function DashboardPage() {
     try {
 
       const response = await fetch(
-        "http://127.0.0.1:8000/dashboard"
+        "http://localhost:8000/dashboard"
       );
+
+      if (!response.ok) {
+
+        throw new Error(
+          "Failed to fetch dashboard"
+        );
+      }
 
       const data = await response.json();
 
-      setCompanies(
-        data.companies || []
+      console.log(
+        "DASHBOARD DATA:",
+        data
       );
 
-      setFinancialData(
-        data.financial_data || []
+      console.log(
+        "SENTIMENTS:",
+        data.sentiments
       );
 
-      setAnalystInsights(
-        data.analyst_insights || ""
+      setKpis(
+        data.kpis || null
       );
 
-      setScores(
-        data.scores || []
+      setComparisonData(
+        data.comparison_table || []
       );
 
       setTrendData(
         data.trend_data || {}
       );
 
+      setSentiments(
+        data.sentiments || []
+      );
+
     } catch (error) {
 
-      console.error(error);
+      console.error(
+        "Dashboard fetch failed:",
+        error
+      );
 
     } finally {
 
       setLoading(false);
+
     }
   }
-
-  const revenueChartData = useMemo(() => {
-
-    return financialData.map((item) => ({
-
-      label: `${item.company} ${item.quarter}`,
-
-      growth: parseFloat(
-
-        item.revenue_growth_yoy
-          .replace("%", "") || "0"
-      ),
-    }));
-
-  }, [financialData]);
-
-  const marginChartData = useMemo(() => {
-
-    return financialData.map((item) => ({
-
-      label: `${item.company} ${item.quarter}`,
-
-      margin: parseFloat(
-
-        item.operating_margin
-          .replace("%", "") || "0"
-      ),
-    }));
-
-  }, [financialData]);
 
   if (loading) {
 
     return (
-
-      <div className="p-10 text-xl text-white bg-black min-h-screen">
+      <div className="min-h-screen bg-black text-white p-10">
 
         Loading dashboard...
 
@@ -175,45 +123,98 @@ export default function DashboardPage() {
 
   return (
 
-    <div className="min-h-screen bg-black text-white p-8 pt-10">
+    <div className="min-h-screen bg-black text-white p-10">
 
-      <h1 className="text-5xl font-bold mb-10">
+      <h1 className="text-5xl font-bold mb-12">
 
         FinSight AI Dashboard
 
       </h1>
 
-      <div className="mb-12">
+      {/* KPI CARDS */}
 
-        <h2 className="text-2xl font-semibold mb-4">
+      {kpis && (
 
-          Uploaded Companies
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
 
-        </h2>
+          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
 
-        <div className="flex gap-4 flex-wrap">
+            <h2 className="text-zinc-400 mb-2">
 
-          {companies.map((company, idx) => (
+              Companies
 
-            <div
-              key={idx}
-              className="bg-zinc-900 px-5 py-3 rounded-xl border border-zinc-700"
-            >
-              {company}
-            </div>
-          ))}
+            </h2>
+
+            <p className="text-4xl font-bold">
+
+              {kpis.total_companies}
+
+            </p>
+
+          </div>
+
+          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+
+            <h2 className="text-zinc-400 mb-2">
+
+              Reports
+
+            </h2>
+
+            <p className="text-4xl font-bold">
+
+              {kpis.total_reports}
+
+            </p>
+
+          </div>
+
+          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+
+            <h2 className="text-zinc-400 mb-2">
+
+              Avg Revenue Growth
+
+            </h2>
+
+            <p className="text-4xl font-bold">
+
+              {kpis.avg_revenue_growth?.toFixed(2)}%
+
+            </p>
+
+          </div>
+
+          <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800">
+
+            <h2 className="text-zinc-400 mb-2">
+
+              Avg Operating Margin
+
+            </h2>
+
+            <p className="text-4xl font-bold">
+
+              {kpis.avg_operating_margin?.toFixed(2)}%
+
+            </p>
+
+          </div>
+
         </div>
-      </div>
+      )}
 
-      <div className="mb-14 overflow-x-auto">
+      {/* COMPANY COMPARISON */}
 
-        <h2 className="text-2xl font-semibold mb-4">
+      <div className="mb-16 overflow-x-auto">
+
+        <h2 className="text-4xl font-bold mb-8">
 
           Company Comparison
 
         </h2>
 
-        <table className="w-full border border-zinc-700 rounded-xl overflow-hidden">
+        <table className="w-full border border-zinc-800">
 
           <thead className="bg-zinc-900">
 
@@ -236,7 +237,11 @@ export default function DashboardPage() {
               </th>
 
               <th className="p-4 text-left">
-                Top Risks
+                Net Income Growth
+              </th>
+
+              <th className="p-4 text-left">
+                Investment Score
               </th>
 
             </tr>
@@ -245,410 +250,198 @@ export default function DashboardPage() {
 
           <tbody>
 
-            {financialData.map((item, idx) => (
+            {comparisonData?.map((row, idx) => (
 
               <tr
                 key={idx}
-                className="border-t border-zinc-700"
+                className="border-t border-zinc-800"
               >
 
                 <td className="p-4">
-                  {item.company}
+                  {row.company}
                 </td>
 
                 <td className="p-4">
-                  {item.quarter}
+                  {row.quarter}
                 </td>
 
                 <td className="p-4">
-                  {item.revenue_growth_yoy || "N/A"}
+                  {row.revenue_growth}%
                 </td>
 
                 <td className="p-4">
-                  {item.operating_margin || "N/A"}
+                  {row.operating_margin}%
                 </td>
 
                 <td className="p-4">
-                  {item.key_risks.join(", ") || "N/A"}
+                  {row.net_income_growth}%
+                </td>
+
+                <td className="p-4">
+                  {row.investment_score}
                 </td>
 
               </tr>
             ))}
 
           </tbody>
+
         </table>
+
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
-
-        <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-700">
-
-          <h2 className="text-2xl font-semibold mb-6">
-
-            Revenue Growth Comparison
-
-          </h2>
-
-          <div className="h-80">
-
-            <ResponsiveContainer width="100%" height="100%">
-
-              <BarChart data={revenueChartData}>
-
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis
-                  dataKey="label"
-                  interval={0}
-                  angle={-15}
-                  textAnchor="end"
-                  height={80}
-                />
-
-                <YAxis />
-
-                <Tooltip />
-
-                <Bar dataKey="growth" />
-
-              </BarChart>
-
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-700">
-
-          <h2 className="text-2xl font-semibold mb-6">
-
-            Operating Margin Comparison
-
-          </h2>
-
-          <div className="h-80">
-
-            <ResponsiveContainer width="100%" height="100%">
-
-              <BarChart data={marginChartData}>
-
-                <CartesianGrid strokeDasharray="3 3" />
-
-                <XAxis
-                  dataKey="label"
-                  interval={0}
-                  angle={-15}
-                  textAnchor="end"
-                  height={80}
-                />
-
-                <YAxis />
-
-                <Tooltip />
-
-                <Bar dataKey="margin" />
-
-              </BarChart>
-
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-
-        {financialData.map((item, idx) => (
-
-          <div
-            key={idx}
-            className="bg-zinc-900 rounded-2xl p-6 border border-zinc-700"
-          >
-
-            <h2 className="text-3xl font-bold mb-2">
-
-              {item.company}
-
-            </h2>
-
-            <p className="text-zinc-400 mb-5">
-
-              {item.quarter}
-
-            </p>
-
-            <div className="space-y-3">
-
-              <p>
-
-                <span className="font-semibold">
-
-                  Revenue Growth:
-
-                </span>{" "}
-
-                {item.revenue_growth_yoy || "N/A"}
-
-              </p>
-
-              <p>
-
-                <span className="font-semibold">
-
-                  Operating Margin:
-
-                </span>{" "}
-
-                {item.operating_margin || "N/A"}
-
-              </p>
-            </div>
-
-            <div className="mt-6">
-
-              <h3 className="text-red-400 font-semibold mb-3">
-
-                Key Risks
-
-              </h3>
-
-              <ul className="list-disc ml-5 space-y-2">
-
-                {item.key_risks.map((risk, i) => (
-
-                  <li key={i}>{risk}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-6">
-
-              <h3 className="text-green-400 font-semibold mb-3">
-
-                Opportunities
-
-              </h3>
-
-              <ul className="list-disc ml-5 space-y-2">
-
-                {item.key_opportunities.map((opp, i) => (
-
-                  <li key={i}>{opp}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-6">
-
-              <h3 className="text-blue-400 font-semibold mb-3">
-
-                Strategic Highlights
-
-              </h3>
-
-              <ul className="list-disc ml-5 space-y-2">
-
-                {item.strategic_highlights.map(
-
-                  (highlight, i) => (
-
-                    <li key={i}>
-                      {highlight}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-8 mb-16">
-
-        <h2 className="text-3xl font-bold mb-5">
-
-          Analyst Insights
-
-        </h2>
-
-        <div className="text-zinc-300 leading-8 whitespace-pre-wrap">
-
-          {analystInsights || "No insights available."}
-
-        </div>
-      </div>
+      {/* FINANCIAL SENTIMENT */}
 
       <div className="mb-16">
 
         <h2 className="text-4xl font-bold mb-8">
 
-          Financial Trends
+          Financial Sentiment Analysis
 
         </h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-          {Object.entries(trendData).map(
+          {sentiments?.map((item, idx) => (
 
-            ([company, trends], idx) => {
+            <div
+              key={idx}
+              className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6"
+            >
 
-              const revenueTrendData =
-                trends.map((trend) => ({
+              <h3 className="text-2xl font-bold mb-2">
 
-                  quarter: trend.quarter,
+                {item.company}
 
-                  growth: parseFloat(
+              </h3>
 
-                    trend.revenue_growth.replace(
-                      "%",
-                      ""
-                    ) || "0"
-                  ),
-                }));
+              <p className="text-zinc-400 mb-5">
 
-              return (
+                {item.quarter}
 
-                <div
-                  key={idx}
-                  className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6"
-                >
+              </p>
 
-                  <h3 className="text-2xl font-bold mb-6">
+              <div className="space-y-4">
 
-                    {company} Revenue Trend
+                <div>
 
-                  </h3>
+                  <span className="font-semibold">
 
-                  <div className="h-80">
+                    Sentiment:
 
-                    <ResponsiveContainer
-                      width="100%"
-                      height="100%"
-                    >
+                  </span>{" "}
 
-                      <BarChart data={revenueTrendData}>
+                  <span
+                    className={
+                      item.sentiment === "positive"
+                        ? "text-green-400"
+                        : item.sentiment === "negative"
+                        ? "text-red-400"
+                        : "text-yellow-400"
+                    }
+                  >
 
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                        />
+                    {item.sentiment}
 
-                        <XAxis dataKey="quarter" />
+                  </span>
 
-                        <YAxis />
-
-                        <Tooltip />
-
-                        <Bar dataKey="growth" />
-
-                      </BarChart>
-
-                    </ResponsiveContainer>
-                  </div>
                 </div>
-              );
-            }
-          )}
+
+                <div>
+
+                  <span className="font-semibold">
+
+                    Confidence:
+
+                  </span>{" "}
+
+                  {(item.score * 100).toFixed(1)}%
+
+                </div>
+
+                <div>
+
+                  <span className="font-semibold">
+
+                    Tone:
+
+                  </span>{" "}
+
+                  {item.tone}
+
+                </div>
+
+              </div>
+
+            </div>
+          ))}
+
         </div>
+
       </div>
 
-      <div className="mt-16">
+      {/* HISTORICAL TRENDS */}
+
+      <div className="mb-16">
 
         <h2 className="text-4xl font-bold mb-8">
 
-          Investment Rankings
+          Historical Trends
 
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="space-y-6">
 
-          {scores
-            .sort(
-              (a, b) =>
-                b.overall_score - a.overall_score
-            )
-            .map((score, idx) => (
+          {Object.entries(trendData || {}).map(
+            ([company, trends]) => (
 
               <div
-                key={idx}
-                className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6"
+                key={company}
+                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6"
               >
 
-                <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold mb-4">
 
-                  <div>
+                  {company}
 
-                    <h3 className="text-2xl font-bold">
+                </h3>
 
-                      {score.company}
+                <div className="space-y-3">
 
-                    </h3>
+                  {trends?.map((trend, idx) => (
 
-                    <div className="text-sm text-zinc-400 mt-1">
+                    <div
+                      key={idx}
+                      className="flex justify-between border-b border-zinc-800 pb-2"
+                    >
 
-                      Average Across All Quarters
+                      <span>
+                        {trend.quarter}
+                      </span>
+
+                      <span>
+                        Revenue Growth:{" "}
+                        {trend.revenue_growth}%
+                      </span>
+
+                      <span>
+                        Operating Margin:{" "}
+                        {trend.operating_margin}%
+                      </span>
 
                     </div>
-                  </div>
+                  ))}
 
-                  <span className="text-3xl">
-
-                    {idx === 0 && "🥇"}
-
-                    {idx === 1 && "🥈"}
-
-                    {idx === 2 && "🥉"}
-
-                  </span>
                 </div>
 
-                <div className="space-y-3 text-sm">
-
-                  <p>
-
-                    <span className="font-semibold">
-
-                      Growth Score:
-
-                    </span>{" "}
-
-                    {score.growth_score}
-
-                  </p>
-
-                  <p>
-
-                    <span className="font-semibold">
-
-                      Risk Score:
-
-                    </span>{" "}
-
-                    {score.risk_score}
-
-                  </p>
-
-                  <p>
-
-                    <span className="font-semibold">
-
-                      Innovation Score:
-
-                    </span>{" "}
-
-                    {score.innovation_score}
-
-                  </p>
-
-                  <p className="text-xl font-bold pt-4">
-
-                    Overall Score:{" "}
-
-                    {score.overall_score}
-
-                  </p>
-                </div>
               </div>
-            ))}
+            )
+          )}
+
         </div>
+
       </div>
+
     </div>
   );
 }

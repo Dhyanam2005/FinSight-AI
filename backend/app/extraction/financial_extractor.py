@@ -13,13 +13,16 @@ EXTRACTION_SCHEMA = {
 
     "revenue": "",
 
-    "revenue_growth_yoy": "",
+    # FIXED KEY
+    "revenue_growth": "",
 
     "gross_margin": "",
 
     "operating_margin": "",
 
     "net_income": "",
+
+    "net_income_growth": "",
 
     "eps": "",
 
@@ -68,7 +71,19 @@ def extract_financial_data(chunk, metadata):
     - Empty string if metric missing
     - Empty list if no items found
     - Keep values concise
-    - Include units like %, $, €, billions
+    - IMPORTANT:
+      revenue_growth and operating_margin
+      must be numeric values ONLY
+
+    Examples:
+    GOOD:
+    18
+    26.4
+
+    BAD:
+    "18%"
+    "26.4 percent"
+
     - company = "{company}"
     - quarter = "{quarter}"
     - section = "{section}"
@@ -104,6 +119,41 @@ def extract_financial_data(chunk, metadata):
             if key not in data:
 
                 data[key] = default_value
+
+        # =========================
+        # SAFE NUMERIC CONVERSION
+        # =========================
+
+        numeric_fields = [
+
+            "revenue_growth",
+
+            "operating_margin",
+
+            "net_income_growth"
+        ]
+
+        for field in numeric_fields:
+
+            value = data.get(field)
+
+            if isinstance(value, str):
+
+                value = value.replace(
+                    "%",
+                    ""
+                ).replace(
+                    ",",
+                    ""
+                ).strip()
+
+                try:
+
+                    data[field] = float(value)
+
+                except:
+
+                    data[field] = 0
 
         return data
 
