@@ -2,19 +2,28 @@ from app.rag.vector_store import search_faiss
 from app.rag.bm25_store import search_bm25
 from app.rag.reranker import rerank_chunks
 from app.rag.context_compressor import compress_context
-
+from app.rag.query_rewriter import rewrite_query
 
 def hybrid_search(query, top_k=5):
 
+    original_query = query
+
+    rewritten_query = rewrite_query(query)
+
+    print("\nOriginal Query:")
+    print(original_query)
+
+    print("\nRewritten Query:")
+    print(rewritten_query)
     # Retrieve from FAISS
     faiss_results = search_faiss(
-        query=query,
+        query=rewritten_query,
         k=10
     )
 
     # Retrieve from BM25
     bm25_results = search_bm25(
-        query=query,
+        query=rewritten_query,
         k=10
     )
 
@@ -35,7 +44,7 @@ def hybrid_search(query, top_k=5):
 
     # Rerank chunks
     reranked_results = rerank_chunks(
-        query=query,
+        query=rewritten_query,
         chunks=unique_results,
         top_k=top_k
     )
@@ -48,7 +57,7 @@ def hybrid_search(query, top_k=5):
 
     # Compress context
     compressed_chunks = compress_context(
-        query=query,
+        query=rewritten_query,
         chunks=chunk_texts
     )
 
