@@ -3,81 +3,91 @@ import google.generativeai as genai
 import json
 
 from app.rag.hybrid_retriever import hybrid_search
+from app.memory.conversation_memory import (
+    extract_companies,
+    extract_metrics,
+    detect_intent,
+    update_memory,
+    enrich_query,
+    build_context_prompt,
+    get_memory,
+)
 
 router = APIRouter()
 
 
 @router.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
-
     await websocket.accept()
 
     try:
-
         while True:
-
-            # Receive user query
             query = await websocket.receive_text()
 
-            print("\nUser Query:")
+            print("\n===== USER QUERY =====")
             print(query)
 
-            # Retrieve relevant chunks
-            retrieved_chunks = hybrid_search(query)
+            companies = extract_companies(query)
+            metrics   = extract_metrics(query)
+            intent    = detect_intent(query)
 
-            print("\nRetrieved Chunks:")
+            update_memory(
+                query=query,
+                intent=intent,
+                mode="rag",
+                companies=companies,
+                metrics=metrics,
+            )
+
+            print("\n===== MEMORY SNAPSHOT =====")
+            print(get_memory())
+
+            enhanced = enrich_query(query)
+            print("\n===== ENHANCED QUERY =====")
+            print(enhanced)
+
+            retrieved_chunks = hybrid_search(enhanced)
+            print("\n===== RETRIEVED CHUNKS =====")
             print(retrieved_chunks)
 
-            # Build final context
-            context = "\n\n".join(
-                [chunk.page_content for chunk in retrieved_chunks]
-            )
+            # ── Handle both dict chunks and LangChain Document objects ──
+            context_parts = []
+            for chunk in retrieved_chunks:
+                if isinstance(chunk, dict):
+                    # hybrid_search returns dicts: {"text": ..., "page": ..., "document": ...}
+                    context_parts.append(chunk.get("text", ""))
+                else:
+                    # LangChain Document object
+                    context_parts.append(chunk.page_content)
+            context = "\n\n".join(context_parts)
 
-            print("\nFinal Context:")
-            print(context)
+            prompt = f"""You are FinSight AI, a financial research assistant.
 
-            # Prompt
-            prompt = f"""
-            You are FinSight AI, a financial research assistant.
+{build_context_prompt()}
 
-            Answer the user's question using ONLY the provided context.
+Answer ONLY using the provided context below.
+If the context does not contain enough information, say so clearly.
 
-            Context:
-            {context}
+CONTEXT:
+{context}
 
-            Question:
-            {query}
-            """
+USER QUESTION:
+{query}
+"""
 
-            # Gemini streaming response
-            response = genai.GenerativeModel(
-                "gemini-2.5-flash"
-            ).generate_content(
+            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
                 prompt,
-                stream=True
+                stream=True,
             )
 
-            # Stream tokens to frontend
             for chunk in response:
-
                 if chunk.text:
-
                     await websocket.send_text(
-                        json.dumps({
-                            "type": "token",
-                            "content": chunk.text
-                        })
+                        json.dumps({"type": "token", "content": chunk.text})
                     )
 
-            # Signal stream complete
-            await websocket.send_text(
-                json.dumps({
-                    "type": "end"
-                })
-            )
+            await websocket.send_text(json.dumps({"type": "end"}))
 
     except Exception as e:
-
-        print(f"WebSocket Error: {e}")
-
+        print(f"WebSocket error: {e}")
         await websocket.close()
