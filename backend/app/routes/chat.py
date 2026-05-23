@@ -26,7 +26,7 @@ async def ask_question(req: QueryRequest):
     # Hybrid retrieval (FAISS + BM25)
     docs = hybrid_search(
         req.question,
-        k=4
+        top_k=4
     )
 
     print("Retrieved Docs:")

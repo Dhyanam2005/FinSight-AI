@@ -29,7 +29,7 @@ def create_vector_store(chunks):
     return vector_store
 
 
-def search_similar_chunks(query, k=4):
+def search_faiss(query, k=4):
 
     if store.vector_db is None:
         return []
@@ -39,14 +39,4 @@ def search_similar_chunks(query, k=4):
         k=k
     )
 
-    chunks = []
-
-    for doc in results:
-
-        chunks.append({
-            "text": doc.page_content,
-            "page": doc.metadata["page"],
-            "document": doc.metadata["document"]
-        })
-
-    return chunks
+    return results

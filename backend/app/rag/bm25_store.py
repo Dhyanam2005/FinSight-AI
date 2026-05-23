@@ -1,4 +1,5 @@
 from rank_bm25 import BM25Okapi
+from langchain_core.documents import Document
 
 bm25 = None
 documents = []
@@ -37,4 +38,20 @@ def search_bm25(query, k=4):
         reverse=True
     )[:k]
 
-    return [documents[i] for i in ranked_indices]
+    results = []
+
+    for i in ranked_indices:
+
+        chunk = documents[i]
+
+        results.append(
+            Document(
+                page_content=chunk["text"],
+                metadata={
+                    "page": chunk["page"],
+                    "document": chunk["document"]
+                }
+            )
+        )
+
+    return results

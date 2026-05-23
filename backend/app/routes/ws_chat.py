@@ -1,17 +1,10 @@
 from fastapi import APIRouter, WebSocket
 import google.generativeai as genai
-import os
 import json
 
 from app.rag.hybrid_retriever import hybrid_search
 
 router = APIRouter()
-
-# Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-# Recommended model for free tier
-model = genai.GenerativeModel("gemini-2.5-flash")
 
 
 @router.websocket("/ws/chat")
@@ -23,52 +16,48 @@ async def websocket_chat(websocket: WebSocket):
 
         while True:
 
-            # Receive question from frontend
-            question = await websocket.receive_text()
+            # Receive user query
+            query = await websocket.receive_text()
 
-            # Hybrid retrieval
-            chunks = hybrid_search(
-                question,
-                k=4
+            print("\nUser Query:")
+            print(query)
+
+            # Retrieve relevant chunks
+            retrieved_chunks = hybrid_search(query)
+
+            print("\nRetrieved Chunks:")
+            print(retrieved_chunks)
+
+            # Build final context
+            context = "\n\n".join(
+                [chunk.page_content for chunk in retrieved_chunks]
             )
 
-            print("Retrieved Chunks:")
-            print(chunks)
+            print("\nFinal Context:")
+            print(context)
 
-            # Build multi-document context
-            context = ""
-
-            for chunk in chunks:
-
-                context += f"""
-Document: {chunk['document']}
-Page: {chunk['page']}
-
-Content:
-{chunk['text']}
-
-"""
-
-            # Create prompt
+            # Prompt
             prompt = f"""
-Answer ONLY using the provided context.
+            You are FinSight AI, a financial research assistant.
 
-If multiple documents are provided, compare and synthesize information across them.
+            Answer the user's question using ONLY the provided context.
 
-Context:
-{context}
+            Context:
+            {context}
 
-Question:
-{question}
-"""
+            Question:
+            {query}
+            """
 
-            # Stream Gemini response
-            response = model.generate_content(
+            # Gemini streaming response
+            response = genai.GenerativeModel(
+                "gemini-2.5-flash"
+            ).generate_content(
                 prompt,
                 stream=True
             )
 
-            # Send streamed chunks directly
+            # Stream tokens to frontend
             for chunk in response:
 
                 if chunk.text:
@@ -80,7 +69,7 @@ Question:
                         })
                     )
 
-            # Tell frontend generation finished
+            # Signal stream complete
             await websocket.send_text(
                 json.dumps({
                     "type": "end"
@@ -89,13 +78,6 @@ Question:
 
     except Exception as e:
 
-        print("WebSocket Error:", e)
-
-        await websocket.send_text(
-            json.dumps({
-                "type": "error",
-                "content": str(e)
-            })
-        )
+        print(f"WebSocket Error: {e}")
 
         await websocket.close()
