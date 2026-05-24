@@ -23,7 +23,10 @@ def analyze_trends():
 
         revenue_growth = item.get("revenue_growth", 0)
 
-        item.get("operating_margin", 0)
+        operating_margin = item.get(
+    "operating_margin",
+    0
+)
 
         # =========================
         # CREATE COMPANY BUCKET
