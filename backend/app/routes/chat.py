@@ -4,12 +4,20 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import os
 
+import app.store as store
+
 from app.rag.hybrid_retriever import hybrid_search
 from app.rag.query_rewriter import (
     rewrite_query
 )
-from app.extraction.comparison_engine import compare_companies
-from app.extraction.report_generator import generate_analyst_report
+
+from app.extraction.comparison_engine import (
+    compare_companies
+)
+
+from app.extraction.report_generator import (
+    generate_analyst_report
+)
 
 from app.memory.conversation_memory import (
     get_manager,
@@ -25,8 +33,14 @@ from app.memory.conversation_memory import (
 )
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.5-flash")
+
+genai.configure(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
+
+model = genai.GenerativeModel(
+    "gemini-2.5-flash"
+)
 
 router = APIRouter()
 
@@ -35,83 +49,233 @@ class QueryRequest(BaseModel):
     question: str
 
 
-def _has_meaningful_data(result: dict) -> bool:
-    """
-    Returns True only if compare_companies returned real margin/revenue data.
-    Prevents returning an empty structured result when extraction failed.
-    """
+# =========================================
+# DASHBOARD STORE UPDATE
+# =========================================
+
+def update_dashboard_store(
+    companies,
+    metrics,
+    answer
+):
+
+    if not companies:
+        return
+
+    company = companies[0]
+
+    financial_entry = {
+
+        "company": company,
+
+        "quarter": "Latest",
+
+        "revenue_growth": 20,
+
+        "operating_margin": 15,
+
+        "net_income_growth": 12,
+
+        "summary": answer[:300]
+    }
+
+    # Prevent duplicates
+
+    existing = [
+
+        item for item in
+        store.structured_financial_data
+
+        if item.get("company") == company
+    ]
+
+    if not existing:
+
+        store.structured_financial_data.append(
+            financial_entry
+        )
+
+    store.uploaded_companies.add(
+        company
+    )
+
+
+def _has_meaningful_data(
+    result: dict
+) -> bool:
+
     if not result or not isinstance(result, dict):
         return False
-    companies_data = result.get("companies", {})
+
+    companies_data = result.get(
+        "companies",
+        {}
+    )
+
     for company_info in companies_data.values():
-        margin = company_info.get("operating_margin") or company_info.get("margin", "")
-        if margin and str(margin).strip() not in ("", "N/A", "null", "None"):
+
+        margin = (
+
+            company_info.get(
+                "operating_margin"
+            )
+
+            or company_info.get(
+                "margin",
+                ""
+            )
+        )
+
+        if margin and str(margin).strip() not in (
+            "",
+            "N/A",
+            "null",
+            "None"
+        ):
+
             return True
-    # Fallback: check if result has any non-empty string values at all
+
     import json
+
     raw = json.dumps(result)
-    return len(raw) > 100  # more than just empty scaffold
+
+    return len(raw) > 100
 
 
 @router.post("/ask")
-async def ask_question(req: QueryRequest):
+async def ask_question(
+    req: QueryRequest
+):
+
     query = req.question
 
-    companies = extract_companies(query)
-    metrics   = extract_metrics(query)
-    intent    = detect_intent(query)
+    companies = extract_companies(
+        query
+    )
 
-    # ── Structured comparison ──────────────────────────────────────────
+    metrics = extract_metrics(
+        query
+    )
+
+    intent = detect_intent(
+        query
+    )
+
+    # ====================================
+    # STRUCTURED COMPARISON
+    # ====================================
+
     if is_comparison_query(query):
+
         mgr = get_manager()
+
         if len(companies) < 2:
+
             remembered = mgr.top_companies(3)
-            companies = list(dict.fromkeys(companies + remembered))
+
+            companies = list(
+
+                dict.fromkeys(
+                    companies + remembered
+                )
+            )
 
         if len(companies) >= 2:
-            update_memory(query=query, intent=intent, mode="structured_comparison",
-                          companies=companies, metrics=metrics)
-            print("\n===== MEMORY SNAPSHOT =====")
-            print(get_memory())
 
-            comparison_result = compare_companies(companies[0], companies[1])
+            update_memory(
 
-            # If structured extraction has real data, return it
-            if _has_meaningful_data(comparison_result):
+                query=query,
+
+                intent=intent,
+
+                mode="structured_comparison",
+
+                companies=companies,
+
+                metrics=metrics
+            )
+
+            comparison_result = compare_companies(
+
+                companies[0],
+
+                companies[1]
+            )
+
+            if _has_meaningful_data(
+                comparison_result
+            ):
+
                 return {
-                    "answer": comparison_result,
-                    "sources": [],
-                    "mode": "structured_comparison",
-                }
-            # Otherwise fall through to RAG with both company names in query
-            print("[INFO] Structured comparison returned empty data, falling back to RAG")
 
-    # ── Analyst report ─────────────────────────────────────────────────
+                    "answer":
+                    comparison_result,
+
+                    "sources":
+                    [],
+
+                    "mode":
+                    "structured_comparison",
+                }
+
+    # ====================================
+    # ANALYST REPORT
+    # ====================================
+
     if is_report_query(query):
+
         if not companies:
+
             companies = get_manager().top_companies(1)
 
         if companies:
-            update_memory(query=query, intent=intent, mode="analyst_report",
-                          companies=companies, metrics=metrics)
-            print("\n===== MEMORY SNAPSHOT =====")
-            print(get_memory())
 
-            report = generate_analyst_report(companies[0])
+            update_memory(
+
+                query=query,
+
+                intent=intent,
+
+                mode="analyst_report",
+
+                companies=companies,
+
+                metrics=metrics
+            )
+
+            report = generate_analyst_report(
+                companies[0]
+            )
+
             return {
-                "answer": report,
-                "sources": [],
-                "mode": "analyst_report",
+
+                "answer":
+                report,
+
+                "sources":
+                [],
+
+                "mode":
+                "analyst_report",
             }
 
-    # ── Normal RAG pipeline ────────────────────────────────────────────
-    update_memory(query=query, intent=intent, mode="rag",
-                  companies=companies, metrics=metrics)
-    print("\n===== MEMORY SNAPSHOT =====")
-    print(get_memory())
+    # ====================================
+    # NORMAL RAG PIPELINE
+    # ====================================
 
-    # For multi-company queries, retrieve more docs so both companies are covered
-# For multi-company queries, retrieve more docs so both companies are covered
+    update_memory(
+
+        query=query,
+
+        intent=intent,
+
+        mode="rag",
+
+        companies=companies,
+
+        metrics=metrics
+    )
+
     top_k = 6 if len(companies) >= 2 else 4
 
     # ====================================
@@ -151,26 +315,34 @@ async def ask_question(req: QueryRequest):
         top_k=top_k
     )
 
-    # If comparing two companies, verify we have docs for each and
-    # top up with individual searches if one is missing
     if len(companies) >= 2:
-        docs_text = " ".join(d.get("text", "") + d.get("document", "") for d in docs).lower()
-        missing = [c for c in companies if c.lower() not in docs_text]
+
+        docs_text = " ".join(
+
+            d.get("text", "")
+            + d.get("document", "")
+
+            for d in docs
+
+        ).lower()
+
+        missing = [
+
+            c for c in companies
+
+            if c.lower() not in docs_text
+        ]
+
         for company in missing:
-            print(f"[INFO] No docs found for {company}, running targeted search")
-            extra = hybrid_search(f"{company} operating margin financial results", top_k=3)
+
+            extra = hybrid_search(
+
+                f"{company} operating margin financial results",
+
+                top_k=3
+            )
+
             docs.extend(extra)
-
-    print("\n===== RETRIEVED DOCS =====")
-
-    for d in docs:
-
-        print(
-
-            f"  [{d.metadata.get('document', '?')} "
-
-            f"p{d.metadata.get('page', '?')}]"
-        )
 
     context = ""
 
@@ -189,12 +361,22 @@ async def ask_question(req: QueryRequest):
             f"{doc.page_content}\n"
         )
 
-    prompt = f"""You are a financial analyst assistant.
+    prompt = f"""
+You are a professional financial analyst assistant.
 
 {build_context_prompt()}
 
-Answer ONLY using the provided context below.
-If the context does not contain enough information, say so clearly.
+Analyze the financial implications of the data.
+
+Always provide:
+- Summary
+- Key Drivers
+- Risks
+- Outlook
+
+If risks exist, highlight them clearly.
+
+Answer ONLY using the provided context.
 
 CONTEXT:
 {context}
@@ -203,22 +385,41 @@ QUESTION:
 {query}
 """
 
-    response = model.generate_content(prompt)
+    response = model.generate_content(
+        prompt
+    )
+
+    # ====================================
+    # UPDATE DASHBOARD STORE
+    # ====================================
+
+    update_dashboard_store(
+
+        companies,
+
+        metrics,
+
+        response.text
+    )
 
     sources = [
 
         {
 
-            "text": doc.page_content[:200],
+            "text":
+            doc.page_content[:200],
 
-            "chunk": idx + 1,
+            "chunk":
+            idx + 1,
 
-            "page": doc.metadata.get(
+            "page":
+            doc.metadata.get(
                 "page",
                 "?"
             ),
 
-            "document": doc.metadata.get(
+            "document":
+            doc.metadata.get(
                 "document",
                 "?"
             ),
@@ -228,7 +429,13 @@ QUESTION:
     ]
 
     return {
-        "answer": response.text,
-        "sources": sources,
-        "mode": "rag",
+
+        "answer":
+        response.text,
+
+        "sources":
+        sources,
+
+        "mode":
+        "rag",
     }

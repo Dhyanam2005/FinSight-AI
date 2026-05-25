@@ -187,7 +187,35 @@ async def get_dashboard_data():
 
     comparison_table = []
 
+    # Prevent duplicate company-quarter rows
+    seen = set()
+
     for item in store.structured_financial_data:
+
+        company = item.get(
+            "company",
+            "Unknown"
+        )
+
+        quarter = item.get(
+            "quarter",
+            "Unknown"
+        )
+
+        # =========================
+        # UNIQUE KEY
+        # =========================
+
+        unique_key = (
+            company,
+            quarter
+        )
+
+        # Skip duplicates
+        if unique_key in seen:
+            continue
+
+        seen.add(unique_key)
 
         revenue_growth = (
 
@@ -225,10 +253,10 @@ async def get_dashboard_data():
         comparison_table.append({
 
             "company":
-            item.get("company", "Unknown"),
+            company,
 
             "quarter":
-            item.get("quarter", "Unknown"),
+            quarter,
 
             "revenue_growth":
             revenue_growth,
