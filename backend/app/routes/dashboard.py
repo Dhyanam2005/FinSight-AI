@@ -99,18 +99,63 @@ async def get_dashboard_data():
             print(e)
 
     # =========================
-    # KPI CALCULATIONS
+    # UNIQUE REPORT COUNT
     # =========================
 
+    unique_reports = set()
+
+    for item in store.structured_financial_data:
+
+        company = item.get(
+            "company",
+            "Unknown"
+        )
+
+        quarter = item.get(
+            "quarter",
+            "Unknown"
+        )
+
+        unique_reports.add(
+            (company, quarter)
+        )
+
     total_reports = len(
-        store.structured_financial_data
+        unique_reports
     )
+
+    # =========================
+    # KPI CALCULATIONS
+    # =========================
 
     revenue_growth_values = []
 
     operating_margin_values = []
 
+    # Prevent duplicate KPI counting
+    seen_kpi = set()
+
     for item in store.structured_financial_data:
+
+        company = item.get(
+            "company",
+            "Unknown"
+        )
+
+        quarter = item.get(
+            "quarter",
+            "Unknown"
+        )
+
+        unique_key = (
+            company,
+            quarter
+        )
+
+        if unique_key in seen_kpi:
+            continue
+
+        seen_kpi.add(unique_key)
 
         revenue_growth = (
 
@@ -187,7 +232,7 @@ async def get_dashboard_data():
 
     comparison_table = []
 
-    # Prevent duplicate company-quarter rows
+    # Prevent duplicate rows
     seen = set()
 
     for item in store.structured_financial_data:
@@ -201,10 +246,6 @@ async def get_dashboard_data():
             "quarter",
             "Unknown"
         )
-
-        # =========================
-        # UNIQUE KEY
-        # =========================
 
         unique_key = (
             company,
