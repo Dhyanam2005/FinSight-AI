@@ -110,48 +110,28 @@ def update_dashboard_store(
     answer,
     context=""
 ):
-
     if not companies:
         return
 
     company = companies[0]
-
-    # Extract real numbers from context
-    extracted = extract_metrics_from_context(
-        context,
-        company
-    )
+    extracted = extract_metrics_from_context(context, company)
+    quarter = extracted.get("quarter", "Latest")
 
     financial_entry = {
         "company": company,
-        "quarter": extracted.get("quarter", "Latest"),
-        "revenue_growth": extracted.get("revenue_growth"),    # ✅ real
-        "operating_margin": extracted.get("operating_margin"), # ✅ real
-        "net_income_growth": extracted.get("net_income_growth"), # ✅ real
+        "quarter": quarter,                                      # ✅ per quarter
+        "revenue_growth": extracted.get("revenue_growth"),
+        "operating_margin": extracted.get("operating_margin"),
+        "net_income_growth": extracted.get("net_income_growth"),
         "revenue": extracted.get("revenue"),
         "net_income": extracted.get("net_income"),
         "summary": answer[:300]
     }
 
-    existing = [
-        item for item in
-        store.structured_financial_data
-        if item.get("company") == company
-    ]
-
-    if not existing:
-        store.structured_financial_data.append(
-            financial_entry
-        )
-    else:
-        # ✅ Update existing entry with fresher data
-        for item in store.structured_financial_data:
-            if item.get("company") == company:
-                item.update(financial_entry)
-
+    # ✅ Use upsert — handles both insert and update by company+quarter
+    store.upsert_financial_entry(financial_entry)
     store.uploaded_companies.add(company)
-
-
+    
 def _has_meaningful_data(
     result: dict
 ) -> bool:
@@ -288,7 +268,7 @@ async def ask_question(
     print("\n===== ENHANCED QUERY =====")
     print(enhanced)
 
-    # ====================================
+    # ===================================
     # HYBRID SEARCH
     # ====================================
 
