@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import google.generativeai as genai
 import json
 
@@ -50,23 +50,61 @@ async def websocket_chat(websocket: WebSocket):
             print("\n===== RETRIEVED CHUNKS =====")
             print(retrieved_chunks)
 
-            # ── Handle both dict chunks and LangChain Document objects ──
             context_parts = []
             for chunk in retrieved_chunks:
                 if isinstance(chunk, dict):
-                    # hybrid_search returns dicts: {"text": ..., "page": ..., "document": ...}
                     context_parts.append(chunk.get("text", ""))
                 else:
-                    # LangChain Document object
                     context_parts.append(chunk.page_content)
             context = "\n\n".join(context_parts)
 
-            prompt = f"""You are FinSight AI, a financial research assistant.
+            intent_instructions = {
+                "investment": "Give a clear invest / avoid / watch verdict with reasoning.",
+                "risk": "Prioritize identifying red flags, stress indicators, and downside risks.",
+                "comparison": "Use a structured side-by-side analysis with a clear winner and why.",
+                "growth": "Focus on revenue trajectory, margin expansion, and forward indicators.",
+                "summary": "Give an executive-level summary a non-finance person can understand.",
+            }
+            intent_hint = intent_instructions.get(
+                intent,
+                "Provide a thorough analyst-grade answer."
+            )
+
+            prompt = f"""You are a senior financial analyst with 15+ years of experience in equity research
+and corporate finance. You think like a fund manager — data-driven, skeptical,
+and always focused on what the numbers mean for decisions.
 
 {build_context_prompt()}
 
-Answer ONLY using the provided context below.
-If the context does not contain enough information, say so clearly.
+## YOUR BEHAVIOR RULES
+1. Ground EVERY claim in specific numbers from the context. Never make vague statements.
+2. Proactively flag anomalies — falling margins, rising debt, revenue slowdowns — even if not asked.
+3. Distinguish between short-term noise and structural trends.
+4. Use financial frameworks where relevant: DuPont, Altman Z-Score, working capital analysis.
+5. Always end with actionable insights — not just observations.
+6. If data is missing or insufficient, say so clearly instead of guessing.
+
+## INTENT
+{intent_hint}
+
+## RESPONSE FORMAT
+**📋 Summary**
+[2-3 sentence overview]
+
+**📈 Key Drivers**
+[What's driving performance — positive or negative]
+
+**⚠️ Red Flags**
+[Anomalies, risks, concerning trends — be specific with numbers]
+
+**🎯 Outlook & Recommendation**
+[Forward-looking view + actionable insight]
+
+**💡 Follow-up Questions to Consider**
+[3 sharp questions the user should ask next]
+
+---
+Answer ONLY using the provided context. If context is insufficient, say so.
 
 CONTEXT:
 {context}
@@ -75,19 +113,57 @@ USER QUESTION:
 {query}
 """
 
-            response = genai.GenerativeModel("gemini-2.5-flash").generate_content(
-                prompt,
-                stream=True,
-            )
+            try:
+                response = genai.GenerativeModel(
+                    "gemini-2.5-flash"
+                ).generate_content(
+                    prompt,
+                    stream=True,
+                )
 
-            for chunk in response:
-                if chunk.text:
+                for chunk in response:
+                    if chunk.text:
+                        await websocket.send_text(
+                            json.dumps({
+                                "type": "token",
+                                "content": chunk.text
+                            })
+                        )
+
+                await websocket.send_text(
+                    json.dumps({"type": "end"})
+                )
+
+            except WebSocketDisconnect:
+                # Client disconnected mid-stream — just stop, don't close again
+                print("Client disconnected during streaming")
+                return
+
+            except Exception as e:
+                # Gemini or other error — notify client if still connected
+                print(f"Streaming error: {e}")
+                try:
                     await websocket.send_text(
-                        json.dumps({"type": "token", "content": chunk.text})
+                        json.dumps({
+                            "type": "error",
+                            "content": "An error occurred while generating the response."
+                        })
                     )
+                except Exception:
+                    pass  # Client already gone
 
-            await websocket.send_text(json.dumps({"type": "end"}))
+    except WebSocketDisconnect:
+        # Client disconnected cleanly — no need to close, just exit
+        print("WebSocket disconnected cleanly")
 
     except Exception as e:
-        print(f"WebSocket error: {e}")
-        await websocket.close()
+        print(f"WebSocket fatal error: {e}")
+        try:
+            await websocket.send_text(
+                json.dumps({
+                    "type": "error",
+                    "content": "A server error occurred."
+                })
+            )
+        except Exception:
+            pass  # Already disconnected, ignore

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
 import MessageBubble from "./MessageBubble";
 import { Message } from "@/types/chat";
 
@@ -12,39 +11,38 @@ export default function ChatBox() {
   const [loading, setLoading] = useState(false);
 
   const socket = useRef<WebSocket | null>(null);
+  const isConnected = useRef(false); // ✅ prevent double connection
 
   useEffect(() => {
 
-    socket.current = new WebSocket(
-      "ws://localhost:8000/ws/chat"
-    );
+    // ✅ StrictMode runs useEffect twice — guard against double init
+    if (isConnected.current) return;
+    isConnected.current = true;
 
-    socket.current.onopen = () => {
+    const ws = new WebSocket("ws://localhost:8000/ws/chat");
+    socket.current = ws;
+
+    ws.onopen = () => {
       console.log("WebSocket Connected");
     };
 
-    socket.current.onmessage = (event) => {
+    ws.onmessage = (event) => {
 
       const data = JSON.parse(event.data);
 
-      // Stream tokens
       if (data.type === "token") {
-
         setMessages((prev) => {
 
           const updated = [...prev];
+          const last = updated[updated.length - 1];
 
-          const lastMessage = updated[updated.length - 1];
-
-          // Continue existing assistant message
-          if (lastMessage?.role === "assistant") {
-
-            lastMessage.content += data.content;
-          }
-
-          // First streamed token
-          else {
-
+          if (last?.role === "assistant") {
+            // ✅ Create new object — don't mutate existing
+            updated[updated.length - 1] = {
+              ...last,
+              content: last.content + data.content,
+            };
+          } else {
             updated.push({
               role: "assistant",
               content: data.content,
@@ -52,54 +50,72 @@ export default function ChatBox() {
             });
           }
 
-          return [...updated];
+          return updated;
         });
       }
 
-      // Streaming finished
       if (data.type === "end") {
+        setLoading(false);
+      }
 
+      if (data.type === "error") {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "⚠️ " + data.content,
+            sources: [],
+          },
+        ]);
         setLoading(false);
       }
     };
 
-    socket.current.onerror = (error) => {
+    ws.onerror = (error) => {
       console.error("WebSocket Error:", error);
       setLoading(false);
     };
 
-    socket.current.onclose = () => {
+    ws.onclose = () => {
       console.log("WebSocket Closed");
+      isConnected.current = false;
     };
 
     return () => {
-      socket.current?.close();
+      ws.close();
     };
 
   }, []);
 
-  const askQuestion = async () => {
+  const askQuestion = () => {
 
     if (!question.trim()) return;
 
-    // Add user message
+    if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
+      console.error("WebSocket not connected");
+      return;
+    }
+
     const userMessage: Message = {
       role: "user",
       content: question,
     };
 
     setMessages((prev) => [...prev, userMessage]);
-
     setLoading(true);
-
-    // Send question through websocket
-    socket.current?.send(question);
-
+    socket.current.send(question);
     setQuestion("");
   };
 
-  return (
+  // ✅ Allow sending with Enter key (Shift+Enter for new line)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      askQuestion();
+    }
+  };
 
+  return (
     <div className="border rounded-2xl p-6 bg-white shadow-sm">
 
       <h2 className="text-xl font-semibold mb-4">
@@ -115,14 +131,11 @@ export default function ChatBox() {
         )}
 
         {messages.map((msg, idx) => (
-          <MessageBubble
-            key={idx}
-            message={msg}
-          />
+          <MessageBubble key={idx} message={msg} />
         ))}
 
         {loading && (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 animate-pulse">
             Thinking...
           </p>
         )}
@@ -134,14 +147,16 @@ export default function ChatBox() {
         rows={3}
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder="Ask about risks, revenue, growth..."
       />
 
       <button
         onClick={askQuestion}
-        className="mt-4 bg-black text-white px-4 py-2 rounded-lg"
+        disabled={loading || !question.trim()}
+        className="mt-4 bg-black text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Ask
+        {loading ? "Thinking..." : "Ask"}
       </button>
 
     </div>
