@@ -1,6 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import google.generativeai as genai
 import json
+
+from app.services.gemini_service import model  # ✅ single import
 
 from app.rag.hybrid_retriever import hybrid_search
 from app.memory.conversation_memory import (
@@ -60,10 +61,10 @@ async def websocket_chat(websocket: WebSocket):
 
             intent_instructions = {
                 "investment": "Give a clear invest / avoid / watch verdict with reasoning.",
-                "risk": "Prioritize identifying red flags, stress indicators, and downside risks.",
+                "risk":       "Prioritize identifying red flags, stress indicators, and downside risks.",
                 "comparison": "Use a structured side-by-side analysis with a clear winner and why.",
-                "growth": "Focus on revenue trajectory, margin expansion, and forward indicators.",
-                "summary": "Give an executive-level summary a non-finance person can understand.",
+                "growth":     "Focus on revenue trajectory, margin expansion, and forward indicators.",
+                "summary":    "Give an executive-level summary a non-finance person can understand.",
             }
             intent_hint = intent_instructions.get(
                 intent,
@@ -91,14 +92,17 @@ and always focused on what the numbers mean for decisions.
 **📋 Summary**
 [2-3 sentence overview]
 
-**📈 Key Drivers**
-[What's driving performance — positive or negative]
+**✅ Bull Case**
+[Strong positives — growth drivers, competitive moats, tailwinds]
 
-**⚠️ Red Flags**
-[Anomalies, risks, concerning trends — be specific with numbers]
+**⚠️ Bear Case**
+[Headwinds, margin pressure, risks to the thesis]
 
-**🎯 Outlook & Recommendation**
-[Forward-looking view + actionable insight]
+**🚨 Red Flags**
+[Anomalies, concerning trends — be specific with numbers]
+
+**🎯 Verdict**
+[Invest / Avoid / Watch + one-line reason]
 
 **💡 Follow-up Questions to Consider**
 [3 sharp questions the user should ask next]
@@ -114,33 +118,29 @@ USER QUESTION:
 """
 
             try:
-                response = genai.GenerativeModel(
-                    "gemini-2.5-flash"
-                ).generate_content(
-                    prompt,
-                    stream=True,
-                )
+                # ✅ Non-streaming via gemini_service wrapper
+                response = model.generate_content(prompt)
+                full_text = response.text
 
-                for chunk in response:
-                    if chunk.text:
-                        await websocket.send_text(
-                            json.dumps({
-                                "type": "token",
-                                "content": chunk.text
-                            })
-                        )
+                # Stream word by word to frontend
+                words = full_text.split(" ")
+                for word in words:
+                    await websocket.send_text(
+                        json.dumps({
+                            "type": "token",
+                            "content": word + " "
+                        })
+                    )
 
                 await websocket.send_text(
                     json.dumps({"type": "end"})
                 )
 
             except WebSocketDisconnect:
-                # Client disconnected mid-stream — just stop, don't close again
                 print("Client disconnected during streaming")
                 return
 
             except Exception as e:
-                # Gemini or other error — notify client if still connected
                 print(f"Streaming error: {e}")
                 try:
                     await websocket.send_text(
@@ -150,10 +150,9 @@ USER QUESTION:
                         })
                     )
                 except Exception:
-                    pass  # Client already gone
+                    pass
 
     except WebSocketDisconnect:
-        # Client disconnected cleanly — no need to close, just exit
         print("WebSocket disconnected cleanly")
 
     except Exception as e:
@@ -166,4 +165,4 @@ USER QUESTION:
                 })
             )
         except Exception:
-            pass  # Already disconnected, ignore
+            pass

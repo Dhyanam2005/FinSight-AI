@@ -1,24 +1,18 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import google.generativeai as genai
 import json
 import os
 
 import app.store as store
 
+from app.services.gemini_service import model  # ✅ single import
+
 from app.rag.hybrid_retriever import hybrid_search
-from app.rag.query_rewriter import (
-    rewrite_query
-)
+from app.rag.query_rewriter import rewrite_query
 
-from app.extraction.comparison_engine import (
-    compare_companies
-)
-
-from app.extraction.report_generator import (
-    generate_analyst_report
-)
+from app.extraction.comparison_engine import compare_companies
+from app.extraction.report_generator import generate_analyst_report
 
 from app.memory.conversation_memory import (
     get_manager,
@@ -35,30 +29,14 @@ from app.memory.conversation_memory import (
 
 load_dotenv()
 
-genai.configure(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
-
-model = genai.GenerativeModel(
-    "gemini-2.5-flash"
-)
-
 router = APIRouter()
-
-
-class QueryRequest(BaseModel):
-    question: str
 
 
 # =========================================
 # EXTRACT REAL METRICS FROM CONTEXT
 # =========================================
 
-def extract_metrics_from_context(
-    context: str,
-    company: str
-) -> dict:
-
+def extract_metrics_from_context(context: str, company: str) -> dict:
     prompt = f"""
     Extract the following financial metrics for {company} from the context below.
     Return ONLY a JSON object with these exact keys:
@@ -104,12 +82,7 @@ def extract_metrics_from_context(
 # DASHBOARD STORE UPDATE
 # =========================================
 
-def update_dashboard_store(
-    companies,
-    metrics,
-    answer,
-    context=""
-):
+def update_dashboard_store(companies, metrics, answer, context=""):
     if not companies:
         return
 
@@ -119,7 +92,7 @@ def update_dashboard_store(
 
     financial_entry = {
         "company": company,
-        "quarter": quarter,                                      # ✅ per quarter
+        "quarter": quarter,
         "revenue_growth": extracted.get("revenue_growth"),
         "operating_margin": extracted.get("operating_margin"),
         "net_income_growth": extracted.get("net_income_growth"),
@@ -128,65 +101,53 @@ def update_dashboard_store(
         "summary": answer[:300]
     }
 
-    # ✅ Use upsert — handles both insert and update by company+quarter
     store.upsert_financial_entry(financial_entry)
     store.uploaded_companies.add(company)
-    
-def _has_meaningful_data(
-    result: dict
-) -> bool:
 
+
+def _has_meaningful_data(result: dict) -> bool:
     if not result or not isinstance(result, dict):
         return False
 
-    companies_data = result.get(
-        "companies",
-        {}
-    )
+    companies_data = result.get("companies", {})
 
     for company_info in companies_data.values():
-
         margin = (
             company_info.get("operating_margin")
             or company_info.get("margin", "")
         )
-
-        if margin and str(margin).strip() not in (
-            "", "N/A", "null", "None"
-        ):
+        if margin and str(margin).strip() not in ("", "N/A", "null", "None"):
             return True
 
     raw = json.dumps(result)
     return len(raw) > 100
 
 
+class QueryRequest(BaseModel):
+    question: str
+
+
 @router.post("/ask")
-async def ask_question(
-    req: QueryRequest
-):
+async def ask_question(req: QueryRequest):
 
     query = req.question
 
     companies = extract_companies(query)
-    metrics = extract_metrics(query)
-    intent = detect_intent(query)
+    metrics   = extract_metrics(query)
+    intent    = detect_intent(query)
 
     # ====================================
     # STRUCTURED COMPARISON
     # ====================================
 
     if is_comparison_query(query):
-
         mgr = get_manager()
 
         if len(companies) < 2:
             remembered = mgr.top_companies(3)
-            companies = list(
-                dict.fromkeys(companies + remembered)
-            )
+            companies = list(dict.fromkeys(companies + remembered))
 
         if len(companies) >= 2:
-
             update_memory(
                 query=query,
                 intent=intent,
@@ -195,10 +156,7 @@ async def ask_question(
                 metrics=metrics
             )
 
-            comparison_result = compare_companies(
-                companies[0],
-                companies[1]
-            )
+            comparison_result = compare_companies(companies[0], companies[1])
 
             if _has_meaningful_data(comparison_result):
                 return {
@@ -212,12 +170,10 @@ async def ask_question(
     # ====================================
 
     if is_report_query(query):
-
         if not companies:
             companies = get_manager().top_companies(1)
 
         if companies:
-
             update_memory(
                 query=query,
                 intent=intent,
@@ -248,10 +204,6 @@ async def ask_question(
 
     top_k = 6 if len(companies) >= 2 else 4
 
-    # ====================================
-    # QUERY REWRITING
-    # ====================================
-
     rewritten_query = rewrite_query(query)
 
     print("\n===== ORIGINAL QUERY =====")
@@ -259,32 +211,20 @@ async def ask_question(
     print("\n===== REWRITTEN QUERY =====")
     print(rewritten_query)
 
-    # ====================================
-    # MEMORY ENRICHMENT
-    # ====================================
-
     enhanced = enrich_query(rewritten_query)
 
     print("\n===== ENHANCED QUERY =====")
     print(enhanced)
 
-    # ===================================
-    # HYBRID SEARCH
-    # ====================================
-
     docs = hybrid_search(enhanced, top_k=top_k)
 
     if len(companies) >= 2:
-
         docs_text = " ".join(
             d.get("text", "") + d.get("document", "")
             for d in docs
         ).lower()
 
-        missing = [
-            c for c in companies
-            if c.lower() not in docs_text
-        ]
+        missing = [c for c in companies if c.lower() not in docs_text]
 
         for company in missing:
             extra = hybrid_search(
@@ -294,7 +234,6 @@ async def ask_question(
             docs.extend(extra)
 
     context = ""
-
     for doc in docs:
         context += (
             f"\nDocument: {doc.metadata.get('document', '?')}\n"
@@ -308,20 +247,17 @@ async def ask_question(
 
     intent_instructions = {
         "investment": "Give a clear invest / avoid / watch verdict with reasoning.",
-        "risk": "Prioritize identifying red flags, stress indicators, and downside risks.",
+        "risk":       "Prioritize identifying red flags, stress indicators, and downside risks.",
         "comparison": "Use a structured side-by-side analysis with a clear winner and why.",
-        "growth": "Focus on revenue trajectory, margin expansion, and forward indicators.",
-        "summary": "Give an executive-level summary a non-finance person can understand.",
+        "growth":     "Focus on revenue trajectory, margin expansion, and forward indicators.",
+        "summary":    "Give an executive-level summary a non-finance person can understand.",
     }
 
-    intent_hint = intent_instructions.get(
-        intent,
-        "Provide a thorough analyst-grade answer."
-    )
+    intent_hint = intent_instructions.get(intent, "Provide a thorough analyst-grade answer.")
 
     prompt = f"""
-    You are a senior financial analyst with 15+ years of experience in equity research 
-    and corporate finance. You think like a fund manager — data-driven, skeptical, 
+    You are a senior financial analyst with 15+ years of experience in equity research
+    and corporate finance. You think like a fund manager — data-driven, skeptical,
     and always focused on what the numbers mean for decisions.
 
     {build_context_prompt()}
@@ -341,14 +277,17 @@ async def ask_question(
     **📋 Summary**
     [2-3 sentence overview]
 
-    **📈 Key Drivers**
-    [What's driving performance — positive or negative]
+    **✅ Bull Case**
+    [Strong positives — growth drivers, competitive moats, tailwinds]
 
-    **⚠️ Red Flags**
-    [Anomalies, risks, concerning trends — be specific with numbers]
+    **⚠️ Bear Case**
+    [Headwinds, margin pressure, risks to the thesis]
 
-    **🎯 Outlook & Recommendation**
-    [Forward-looking view + actionable insight]
+    **🚨 Red Flags**
+    [Anomalies, concerning trends — be specific with numbers]
+
+    **🎯 Verdict**
+    [Invest / Avoid / Watch + one-line reason]
 
     **💡 Follow-up Questions to Consider**
     [3 sharp questions the user should ask next]
@@ -365,15 +304,11 @@ async def ask_question(
 
     response = model.generate_content(prompt)
 
-    # ====================================
-    # UPDATE DASHBOARD STORE ✅ with context
-    # ====================================
-
     update_dashboard_store(
         companies,
         metrics,
         response.text,
-        context=context        # ✅ passing real context now
+        context=context
     )
 
     sources = [
