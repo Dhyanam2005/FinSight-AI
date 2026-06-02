@@ -4,6 +4,7 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.upload import router as upload_router
 from app.routes.chat import router as chat_router
 from app.routes.ws_chat import router as ws_router
+from app.routes.thesis import router as thesis_router
 
 app = FastAPI()
 
@@ -19,6 +20,8 @@ app.include_router(upload_router)
 app.include_router(chat_router)
 app.include_router(ws_router)
 app.include_router(dashboard_router)
+app.include_router(thesis_router)
+
 
 @app.get("/")
 def home():

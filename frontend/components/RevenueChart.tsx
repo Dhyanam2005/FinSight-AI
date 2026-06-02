@@ -1,5 +1,6 @@
 "use client"
 
+import { Fragment } from "react"
 import {
   LineChart,
   Line,
@@ -7,63 +8,200 @@ import {
   YAxis,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from "recharts"
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7"]
+const COLORS = [
+  "#10b981",
+  "#3b82f6",
+  "#f59e0b",
+  "#ef4444",
+  "#a855f7",
+]
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-zinc-800 border border-zinc-600 rounded-xl px-4 py-3 text-sm shadow-lg">
         <p className="text-zinc-400 mb-2">{label}</p>
-        {payload.map((p: any, i: number) => (
-          <p key={i} style={{ color: p.color }} className="font-semibold">
-            {p.name}: {p.value}%
-          </p>
-        ))}
+
+        {payload
+          .filter(
+            (p: any) => p.value !== null && p.value !== undefined
+          )
+          .map((p: any, i: number) => (
+            <p
+              key={i}
+              style={{ color: p.color }}
+              className="font-semibold"
+            >
+              {p.name.replace("__forecast", " (forecast)")}: {p.value}%
+            </p>
+          ))}
       </div>
     )
   }
+
   return null
 }
 
 export default function RevenueChart({ data }: any) {
-  const companies = [...new Set(data.map((d: any) => d.company))] as string[]
+  const actualData = data.filter((d: any) => !d.is_forecast)
+  const forecastData = data.filter((d: any) => d.is_forecast)
 
-  const quarters = [...new Set(data.map((d: any) => d.quarter))] as string[]
+  // FIX #1: include forecast-only companies
+  const companies = [
+    ...new Set(data.map((d: any) => d.company)),
+  ] as string[]
 
-  const pivoted = quarters.map((q) => {
+  const actualQuarters = [
+    ...new Set(actualData.map((d: any) => d.quarter)),
+  ] as string[]
+
+  const forecastQuarters = [
+    ...new Set(forecastData.map((d: any) => d.quarter)),
+  ] as string[]
+
+  const allQuarters = [
+    ...actualQuarters,
+    ...forecastQuarters.filter(
+      (q) => !actualQuarters.includes(q)
+    ),
+  ]
+
+  const pivoted = allQuarters.map((q) => {
     const row: any = { quarter: q }
-    companies.forEach((c) => {
-      const match = data.find((d: any) => d.quarter === q && d.company === c)
-      row[c] = match ? match.revenue_growth : null
+
+    companies.forEach((company) => {
+      const actualMatch = actualData.find(
+        (d: any) =>
+          d.company === company &&
+          d.quarter === q
+      )
+
+      const forecastMatch = forecastData.find(
+        (d: any) =>
+          d.company === company &&
+          d.quarter === q
+      )
+
+      row[company] = actualMatch
+        ? actualMatch.revenue_growth
+        : null
+
+      // FIX #2: last actual quarter PER COMPANY
+      const companyActuals = actualData.filter(
+        (d: any) => d.company === company
+      )
+
+      const lastActualQuarter =
+        companyActuals.length > 0
+          ? companyActuals[companyActuals.length - 1].quarter
+          : null
+
+      if (forecastMatch) {
+        row[`${company}__forecast`] =
+          forecastMatch.revenue_growth
+      } else if (
+        actualMatch &&
+        q === lastActualQuarter
+      ) {
+        // bridge actual → forecast
+        row[`${company}__forecast`] =
+          actualMatch.revenue_growth
+      } else {
+        row[`${company}__forecast`] = null
+      }
     })
+
     return row
   })
 
+  console.log("Companies:", companies)
+  console.log("Pivoted:", pivoted)
+
   return (
-    <div className="bg-zinc-900 p-6 rounded-3xl">
-      <h2 className="text-2xl font-bold mb-6">Revenue Growth Trend</h2>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={pivoted}>
-          <XAxis dataKey="quarter" stroke="#71717a" tick={{ fill: "#a1a1aa" }} />
-          <YAxis stroke="#71717a" tick={{ fill: "#a1a1aa" }} />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          {companies.map((company, i) => (
+    <ResponsiveContainer width="100%" height={320}>
+      <LineChart data={pivoted}>
+        <XAxis
+          dataKey="quarter"
+          stroke="#71717a"
+          tick={{
+            fill: "#a1a1aa",
+            fontSize: 12,
+          }}
+        />
+
+        <YAxis
+          stroke="#71717a"
+          tick={{
+            fill: "#a1a1aa",
+            fontSize: 12,
+          }}
+        />
+
+        <Tooltip content={<CustomTooltip />} />
+
+        <Legend
+          formatter={(value) =>
+            value.includes("__forecast")
+              ? `${value.replace(
+                  "__forecast",
+                  ""
+                )} (forecast)`
+              : value
+          }
+        />
+
+        {companies.map((company, i) => (
+          <Fragment key={company}>
+            {/* Actual */}
             <Line
-              key={company}
+              key={`${company}-actual`}
               type="monotone"
               dataKey={company}
+              name={company}
               stroke={COLORS[i % COLORS.length]}
               strokeWidth={2}
-              dot={{ r: 5, fill: COLORS[i % COLORS.length], strokeWidth: 0 }}
-              activeDot={{ r: 7, strokeWidth: 0 }}
+              dot={{
+                r: 5,
+                fill: COLORS[i % COLORS.length],
+                strokeWidth: 0,
+              }}
+              activeDot={{
+                r: 7,
+                strokeWidth: 0,
+              }}
+              connectNulls={false}
             />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+
+            {/* Forecast */}
+            <Line
+              key={`${company}-forecast`}
+              type="monotone"
+              dataKey={`${company}__forecast`}
+              name={`${company}__forecast`}
+              stroke={COLORS[i % COLORS.length]}
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              strokeOpacity={0.6}
+              connectNulls={true}
+              dot={{
+                r: 4,
+                fill: "transparent",
+                stroke:
+                  COLORS[i % COLORS.length],
+                strokeWidth: 2,
+              }}
+              activeDot={{
+                r: 6,
+                strokeWidth: 0,
+              }}
+              legendType="none"
+            />
+          </Fragment>
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
   )
 }
