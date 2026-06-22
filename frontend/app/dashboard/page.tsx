@@ -116,7 +116,7 @@ export default function DashboardPage() {
 
   async function fetchDashboard() {
     try {
-      const res = await fetch("http://localhost:8000/dashboard");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/dashboard`);
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setKpis(data.kpis || null);
@@ -135,7 +135,7 @@ export default function DashboardPage() {
   async function generateThesis(company: string) {
     setThesisLoading((prev) => ({ ...prev, [company]: true }));
     try {
-      const res = await fetch("http://localhost:8000/thesis", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/thesis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ company }),
@@ -184,7 +184,7 @@ export default function DashboardPage() {
             className="text-sm text-zinc-400 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition">
             🔄 Refresh
           </button>
-          <button onClick={() => window.open("http://localhost:8000/export/pdf", "_blank")}
+          <button onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/export/pdf`, "_blank")}
             className="text-sm bg-white text-black px-3 py-1.5 rounded-lg font-semibold hover:bg-zinc-200 transition">
             📄 Export PDF
           </button>

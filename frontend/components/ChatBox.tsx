@@ -16,7 +16,7 @@ export default function ChatBox() {
     if (isConnected.current) return;
     isConnected.current = true;
 
-    const ws = new WebSocket("ws://localhost:8000/ws/chat");
+    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WS_URL}/ws/chat`);
     socket.current = ws;
 
     ws.onopen = () => {
@@ -123,7 +123,7 @@ export default function ChatBox() {
   };
 
   const startNewChat = async () => {
-    await fetch("http://localhost:8000/reset", { method: "POST" });
+    await fetch(`${process.env.NEXT_PUBLIC_API_URL}/reset`, { method: "POST" });
     setMessages([]);
     setQuestion("");
     window.dispatchEvent(new Event("session-reset"));
