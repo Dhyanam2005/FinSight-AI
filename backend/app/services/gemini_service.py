@@ -1,4 +1,5 @@
 # app/services/gemini_service.py
+
 import os
 from dotenv import load_dotenv
 from groq import Groq
@@ -6,9 +7,13 @@ from groq import Groq
 load_dotenv()
 
 # ─── Switch provider here anytime ─────────────────────
-PROVIDER = "groq"
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+PROVIDER = "gemini"
+
+GROQ_MODEL = "llama-3.3-70b-versatile"
 GEMINI_MODEL = "gemini-2.5-flash"
+
+# ─── Debug Counter ────────────────────────────────────
+LLM_CALLS = 0
 
 # ─── Groq client ──────────────────────────────────────
 _groq_client = None
@@ -20,12 +25,12 @@ def _get_groq():
     return _groq_client
 
 
-# ─── Drop-in replacement for model.generate_content() ─
+# ─── Groq Wrapper ─────────────────────────────────────
 class _GroqModelWrapper:
     """
-    Mimics the Gemini model interface so all existing code
-    using model.generate_content(prompt) keeps working.
+    Mimics Gemini interface
     """
+
     def generate_content(
         self,
         prompt: str,
@@ -33,39 +38,91 @@ class _GroqModelWrapper:
         temperature: float = 0.7,
         max_tokens: int = 1500
     ):
+        global LLM_CALLS
+
+        LLM_CALLS += 1
+
+        print("\n" + "=" * 60)
+        print(f"GROQ CALL #{LLM_CALLS}")
+        print("Prompt Length:", len(prompt))
+        print("=" * 60)
+
         client = _get_groq()
+
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system},
-                {"role": "user",   "content": prompt}
+                {"role": "user", "content": prompt}
             ],
             temperature=temperature,
             max_tokens=max_tokens
         )
-        # Return object that mimics Gemini response
-        return _GroqResponse(response.choices[0].message.content)
+
+        try:
+            print(
+                f"Prompt Tokens: {response.usage.prompt_tokens} | "
+                f"Completion Tokens: {response.usage.completion_tokens} | "
+                f"Total Tokens: {response.usage.total_tokens}"
+            )
+        except Exception:
+            print("Token usage unavailable")
+
+        print("=" * 60)
+
+        return _GroqResponse(
+            response.choices[0].message.content
+        )
 
 
 class _GroqResponse:
-    """Mimics Gemini response so .text still works everywhere."""
     def __init__(self, text: str):
         self.text = text
 
 
-# ─── Gemini fallback (keep if you want to switch back) ─
+# ─── Gemini Wrapper ───────────────────────────────────
 class _GeminiModelWrapper:
+
     def generate_content(self, prompt: str, **kwargs):
+        global LLM_CALLS
+
         import google.generativeai as genai
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        m = genai.GenerativeModel(GEMINI_MODEL)
-        return m.generate_content(prompt)
+
+        LLM_CALLS += 1
+
+        print("\n" + "=" * 60)
+        print(f"GEMINI CALL #{LLM_CALLS}")
+        print("Prompt Length:", len(prompt))
+        print("Gemini Key Loaded:",
+              os.getenv("GEMINI_API_KEY") is not None)
+        print("=" * 60)
+
+        genai.configure(
+            api_key=os.getenv("GEMINI_API_KEY")
+        )
+
+        model = genai.GenerativeModel(
+            GEMINI_MODEL
+        )
+
+        response = model.generate_content(
+            prompt
+        )
+
+        print("Gemini Response Received")
+        print("=" * 60)
+
+        return response
 
 
-# ─── This is what all files import ────────────────────
+# ─── Export Model ─────────────────────────────────────
 if PROVIDER == "groq":
     model = _GroqModelWrapper()
+
 elif PROVIDER == "gemini":
     model = _GeminiModelWrapper()
+
 else:
-    raise ValueError(f"Unknown provider: {PROVIDER}")
+    raise ValueError(
+        f"Unknown provider: {PROVIDER}"
+    )

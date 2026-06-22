@@ -75,7 +75,7 @@ def detect_company_from_text(full_text: str) -> str:
     """
     try:
         response = model.generate_content(prompt)
-        return response.text.strip()
+        return response.text.strip().title()
     except:
         return "Unknown"
 
