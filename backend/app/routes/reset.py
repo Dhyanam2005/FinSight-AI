@@ -11,7 +11,7 @@ async def reset_session():
     store.structured_financial_data.clear()
     store.financial_sentiments.clear()
     store.uploaded_companies.clear()
-    
+    store.uploaded_files.clear()
     # Clear conversation memory
     reset_memory()
     

@@ -2,7 +2,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 
 from app.services.gemini_service import model  # ✅ single import
-from app.rag.vector_store import store
+import app.store as store
+from app.rag.query_rewriter import rewrite_query
 from app.rag.hybrid_retriever import hybrid_search
 from app.memory.conversation_memory import (
     extract_companies,
@@ -47,7 +48,12 @@ async def websocket_chat(websocket: WebSocket):
             print("\n===== ENHANCED QUERY =====")
             print(enhanced)
 
-            retrieved_chunks = hybrid_search(enhanced)
+            final_query = rewrite_query(enhanced)
+
+            print("\n===== FINAL REWRITTEN QUERY =====")
+            print(final_query)
+
+            retrieved_chunks = hybrid_search(final_query)
             if not retrieved_chunks or all(
                 len(chunk.page_content.strip()) == 0 
                 for chunk in retrieved_chunks
@@ -127,7 +133,7 @@ CONTEXT:
 {context}
 
 USER QUESTION:
-{enhanced}
+{final_query}
 """
 
             try:
