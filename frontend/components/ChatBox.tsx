@@ -5,17 +5,14 @@ import MessageBubble from "./MessageBubble";
 import { Message } from "@/types/chat";
 
 export default function ChatBox() {
-
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
 
   const socket = useRef<WebSocket | null>(null);
-  const isConnected = useRef(false); // ✅ prevent double connection
+  const isConnected = useRef(false);
 
   useEffect(() => {
-
-    // ✅ StrictMode runs useEffect twice — guard against double init
     if (isConnected.current) return;
     isConnected.current = true;
 
@@ -27,17 +24,14 @@ export default function ChatBox() {
     };
 
     ws.onmessage = (event) => {
-
       const data = JSON.parse(event.data);
 
       if (data.type === "token") {
         setMessages((prev) => {
-
           const updated = [...prev];
           const last = updated[updated.length - 1];
 
           if (last?.role === "assistant") {
-            // ✅ Create new object — don't mutate existing
             updated[updated.length - 1] = {
               ...last,
               content: last.content + data.content,
@@ -84,11 +78,9 @@ export default function ChatBox() {
     return () => {
       ws.close();
     };
-
   }, []);
 
   const askQuestion = () => {
-
     if (!question.trim()) return;
 
     if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
@@ -107,7 +99,6 @@ export default function ChatBox() {
     setQuestion("");
   };
 
-  // ✅ Allow sending with Enter key (Shift+Enter for new line)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -115,15 +106,28 @@ export default function ChatBox() {
     }
   };
 
+  const startNewChat = async () => {
+    await fetch("http://localhost:8000/reset", { method: "POST" });
+    setMessages([]);
+    setQuestion("");
+  };
+
   return (
     <div className="border rounded-2xl p-6 bg-white shadow-sm">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">
+          Financial Research Chat
+        </h2>
 
-      <h2 className="text-xl font-semibold mb-4">
-        Financial Research Chat
-      </h2>
+        <button
+          onClick={startNewChat}
+          className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-lg"
+        >
+          + New Chat
+        </button>
+      </div>
 
       <div className="h-[500px] overflow-y-auto border rounded-xl p-4 mb-4 bg-gray-50">
-
         {messages.length === 0 && (
           <p className="text-gray-500 text-sm">
             Ask questions about uploaded financial documents...
@@ -139,7 +143,6 @@ export default function ChatBox() {
             Thinking...
           </p>
         )}
-
       </div>
 
       <textarea
@@ -158,7 +161,6 @@ export default function ChatBox() {
       >
         {loading ? "Thinking..." : "Ask"}
       </button>
-
     </div>
   );
 }

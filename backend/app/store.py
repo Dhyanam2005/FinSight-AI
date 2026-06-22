@@ -29,7 +29,7 @@ def upsert_financial_entry(entry: dict):
     This is the single function all files should use
     to write to structured_financial_data.
     """
-    company = entry.get("company", "Unknown").strip().upper()
+    company = entry.get("company", "Unknown").strip().title()
     quarter = entry.get("quarter", "Unknown")
 
     for i, item in enumerate(structured_financial_data):
