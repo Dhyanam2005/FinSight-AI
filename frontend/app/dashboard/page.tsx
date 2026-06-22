@@ -90,6 +90,12 @@ function riskBadge(level: string) {
 }
 
 export default function DashboardPage() {
+  const [uploadedFiles, setUploadedFiles] = useState<{
+    filename: string;
+    company: string;
+    quarters: number;
+    pages: number;
+  }[]>([])
   const [kpis, setKpis]               = useState<KPIData | null>(null);
   const [comparisonData, setComparisonData] = useState<ComparisonRow[]>([]);
   const [trendData, setTrendData]     = useState<Record<string, TrendPoint[]>>({});
@@ -105,11 +111,17 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    window.addEventListener("session-reset", fetchDashboard);
+    return () => window.removeEventListener("session-reset", fetchDashboard);
+  }, []);
+
   async function fetchDashboard() {
     try {
       const res  = await fetch("http://localhost:8000/dashboard");
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
+      setUploadedFiles(data.uploaded_files || []);
       setKpis(data.kpis || null);
       setComparisonData(data.comparison_table || []);
       setTrendData(data.trend_data || {});
@@ -172,6 +184,30 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* UPLOADED DOCUMENTS */}
+      {uploadedFiles.length > 0 && (
+        <div className="mb-12">
+          <h2 className="text-2xl font-bold mb-4">
+            📄 Loaded Documents ({uploadedFiles.length})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {uploadedFiles.map((file, idx) => (
+              <div key={idx}
+                className="bg-zinc-900 border border-zinc-700 rounded-xl px-5 py-4 flex items-center gap-4">
+                <span className="text-2xl">📄</span>
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{file.filename}</p>
+                  <p className="text-zinc-400 text-sm">{file.company}</p>
+                  <p className="text-zinc-500 text-xs">
+                    {file.quarters} quarters · {file.pages} pages
+                  </p>
+                </div>
+                <span className="ml-auto text-green-400 text-sm">✅</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {/* KPI CARDS */}
       {kpis && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">

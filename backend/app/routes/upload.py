@@ -150,6 +150,12 @@ async def upload_pdf(file: UploadFile = File(...)):
         })
 
     print(f"\n===== STORED {len(quarters_data)} QUARTERS =====")
+    store.uploaded_files.append({
+        "filename": file.filename,
+        "company": company_name,
+        "quarters": len(quarters_data),
+        "pages": len(pages)
+    })
 
     # ====================================
     # STRUCTURED FINANCIAL EXTRACTION

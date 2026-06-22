@@ -162,6 +162,7 @@ async def get_dashboard_data():
         "kpis": kpis,
         "comparison_table": comparison_table,
         "sentiments": sentiments,
+        "uploaded_files": store.uploaded_files,
     }
 
     print("\n===== FINAL DASHBOARD RESPONSE =====")

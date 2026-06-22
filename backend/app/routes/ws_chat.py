@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 
 from app.services.gemini_service import model  # ✅ single import
-
+from app.rag.vector_store import store
 from app.rag.hybrid_retriever import hybrid_search
 from app.memory.conversation_memory import (
     extract_companies,
@@ -48,6 +48,19 @@ async def websocket_chat(websocket: WebSocket):
             print(enhanced)
 
             retrieved_chunks = hybrid_search(enhanced)
+            if not retrieved_chunks or all(
+                len(chunk.page_content.strip()) == 0 
+                for chunk in retrieved_chunks
+            ):
+                companies = list(store.uploaded_companies)
+                loaded = ", ".join(companies) if companies else "None"
+                
+                await websocket.send_text(json.dumps({
+                    "type": "token",
+                    "content": f"I couldn't find relevant information in your uploaded documents.\n\n**Currently loaded:** {loaded}\n\nTry asking specific questions like:\n- 'What is {companies[0] if companies else 'company'} revenue trend?'\n- 'Explain risks for {companies[0] if companies else 'company'}'\n- 'Compare margins across quarters'"
+                }))
+                await websocket.send_text(json.dumps({"type": "end"}))
+                continue
             print("\n===== RETRIEVED CHUNKS =====")
             print(retrieved_chunks)
 
@@ -114,7 +127,7 @@ CONTEXT:
 {context}
 
 USER QUESTION:
-{query}
+{enhanced}
 """
 
             try:

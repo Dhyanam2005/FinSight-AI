@@ -2,6 +2,7 @@ vector_db = None
 structured_financial_data = []
 financial_sentiments = []
 uploaded_companies = set()
+uploaded_files = []
 
 
 def get_company_financials(company: str) -> list:

@@ -110,6 +110,7 @@ export default function ChatBox() {
     await fetch("http://localhost:8000/reset", { method: "POST" });
     setMessages([]);
     setQuestion("");
+    window.dispatchEvent(new Event("session-reset"));
   };
 
   return (

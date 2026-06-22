@@ -7,7 +7,7 @@ from groq import Groq
 load_dotenv()
 
 # ─── Switch provider here anytime ─────────────────────
-PROVIDER = "gemini"
+PROVIDER = "groq"
 
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GEMINI_MODEL = "gemini-2.5-flash"
