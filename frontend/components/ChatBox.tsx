@@ -114,25 +114,31 @@ export default function ChatBox() {
   };
 
   return (
-    <div className="border rounded-2xl p-6 bg-white shadow-sm">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">
-          Financial Research Chat
-        </h2>
-
+    <div className="flex flex-col h-[calc(100vh-220px)]">
+      
+      {/* New Chat button */}
+      <div className="flex justify-end mb-3">
         <button
           onClick={startNewChat}
-          className="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-lg"
+          className="text-xs text-zinc-400 hover:text-white border border-zinc-700 px-3 py-1 rounded-lg transition"
         >
           + New Chat
         </button>
       </div>
 
-      <div className="h-[500px] overflow-y-auto border rounded-xl p-4 mb-4 bg-gray-50">
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto space-y-6 pb-4 px-2">
+        
         {messages.length === 0 && (
-          <p className="text-gray-500 text-sm">
-            Ask questions about uploaded financial documents...
-          </p>
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <p className="text-4xl mb-4">📊</p>
+            <h2 className="text-2xl font-semibold text-white mb-2">
+              FinSight AI
+            </h2>
+            <p className="text-zinc-400 text-sm max-w-sm">
+              Upload a financial PDF and ask questions about revenue, risks, margins, and more.
+            </p>
+          </div>
         )}
 
         {messages.map((msg, idx) => (
@@ -140,28 +146,45 @@ export default function ChatBox() {
         ))}
 
         {loading && (
-          <p className="text-sm text-gray-500 animate-pulse">
-            Thinking...
-          </p>
+          <div className="flex items-center gap-2 text-zinc-400 text-sm">
+            <div className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce" />
+            <div className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce delay-100" />
+            <div className="w-2 h-2 bg-zinc-400 rounded-full animate-bounce delay-200" />
+          </div>
         )}
+
       </div>
 
-      <textarea
-        className="w-full border rounded-lg p-3"
-        rows={3}
-        value={question}
-        onChange={(e) => setQuestion(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Ask about risks, revenue, growth..."
-      />
+      {/* Input area — fixed at bottom like GPT */}
+      <div className="mt-4">
+        <div className="flex items-end gap-3 bg-[#2f2f2f] border border-zinc-700 rounded-2xl px-4 py-3">
+          <textarea
+            className="flex-1 bg-transparent text-white placeholder-zinc-500 resize-none focus:outline-none text-sm leading-relaxed max-h-40"
+            rows={1}
+            value={question}
+            onChange={(e) => {
+              setQuestion(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = e.target.scrollHeight + "px";
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about risks, revenue, growth..."
+          />
+          <button
+            onClick={askQuestion}
+            disabled={loading || !question.trim()}
+            className="bg-white text-black p-2 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-200 transition shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+            </svg>
+          </button>
+        </div>
+        <p className="text-center text-zinc-600 text-xs mt-2">
+          FinSight AI · Answers based on uploaded documents only
+        </p>
+      </div>
 
-      <button
-        onClick={askQuestion}
-        disabled={loading || !question.trim()}
-        className="mt-4 bg-black text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {loading ? "Thinking..." : "Ask"}
-      </button>
     </div>
   );
 }

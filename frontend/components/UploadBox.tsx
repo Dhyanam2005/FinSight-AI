@@ -18,7 +18,6 @@ const STEPS = [
 ];
 
 export default function UploadBox() {
-
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -33,6 +32,7 @@ export default function UploadBox() {
         clearInterval(interval);
         return;
       }
+
       setUploadedFiles((prev) => {
         const updated = [...prev];
         if (updated[fileIndex]) {
@@ -56,7 +56,7 @@ export default function UploadBox() {
 
     setIsUploading(true);
 
-    // ✅ Add new files to existing list (don't replace)
+    // ✅ Add new files to existing list
     const newFiles: UploadedFile[] = Array.from(files).map((f) => ({
       name: f.name,
       status: "pending",
@@ -88,7 +88,9 @@ export default function UploadBox() {
         formData.append("file", files[i]);
 
         await API.post("/upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
         });
 
         clearInterval(interval);
@@ -103,7 +105,6 @@ export default function UploadBox() {
           };
           return updated;
         });
-
       } catch (err) {
         clearInterval(interval);
         console.error(err);
@@ -120,7 +121,7 @@ export default function UploadBox() {
       }
     }
 
-    // ✅ Reset input so same file can be re-uploaded
+    // Reset input so same file can be re-uploaded
     if (inputRef.current) inputRef.current.value = "";
     setIsUploading(false);
   };
@@ -130,10 +131,10 @@ export default function UploadBox() {
   };
 
   const statusColor = (status: UploadedFile["status"]) => {
-    if (status === "done") return "text-green-600";
+    if (status === "done") return "text-green-500";
     if (status === "error") return "text-red-500";
-    if (status === "processing") return "text-blue-500";
-    return "text-gray-400";
+    if (status === "processing") return "text-blue-400";
+    return "text-zinc-400";
   };
 
   const statusIcon = (status: UploadedFile["status"]) => {
@@ -144,21 +145,23 @@ export default function UploadBox() {
   };
 
   return (
-    <div className="border rounded-2xl p-6 shadow-sm bg-white">
-
-      <h2 className="text-xl font-semibold mb-4">
+    <div className="border border-zinc-700 rounded-2xl p-5 bg-[#2f2f2f]">
+      <h2 className="text-base font-semibold mb-3 text-white">
         Upload Financial Documents
       </h2>
 
       {/* Drop zone */}
-      <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-black hover:bg-gray-50 transition-all">
+      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-zinc-600 rounded-xl cursor-pointer hover:border-zinc-400 hover:bg-zinc-700/30 transition-all">
         <span className="text-3xl mb-1">📂</span>
-        <span className="text-sm text-gray-500">
+
+        <span className="text-sm text-zinc-300">
           {isUploading ? "Uploading..." : "Click to upload PDFs"}
         </span>
-        <span className="text-xs text-gray-400 mt-1">
+
+        <span className="text-xs text-zinc-500 mt-1">
           You can keep adding more PDFs anytime
         </span>
+
         <input
           ref={inputRef}
           type="file"
@@ -170,41 +173,44 @@ export default function UploadBox() {
         />
       </label>
 
-      {/* File list */}
+      {/* File List */}
       {uploadedFiles.length > 0 && (
         <div className="mt-4 space-y-2">
           {uploadedFiles.map((file, idx) => (
             <div
               key={idx}
-              className="flex items-center justify-between border rounded-lg px-4 py-2 bg-gray-50"
+              className="flex items-center justify-between border border-zinc-700 rounded-lg px-4 py-2 bg-[#212121]"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <span>{statusIcon(file.status)}</span>
+
                 <div className="min-w-0">
-                  <p className="text-sm font-medium truncate max-w-[200px]">
+                  <p className="text-sm font-medium text-white truncate max-w-[220px]">
                     {file.name}
                   </p>
+
                   <p className={`text-xs ${statusColor(file.status)}`}>
-                    {file.status === "processing" && (
+                    {file.status === "processing" ? (
                       <span className="animate-pulse">{file.step}</span>
+                    ) : (
+                      file.step
                     )}
-                    {file.status !== "processing" && file.step}
                   </p>
                 </div>
               </div>
 
-              {/* Progress bar for processing */}
+              {/* Progress Bar */}
               {file.status === "processing" && (
-                <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden mx-3">
-                  <div className="h-full bg-black rounded-full animate-[progress_10s_linear_forwards]" />
+                <div className="w-24 h-1.5 bg-zinc-700 rounded-full overflow-hidden mx-3">
+                  <div className="h-full bg-white rounded-full animate-[progress_10s_linear_forwards]" />
                 </div>
               )}
 
-              {/* Remove button for done/error */}
+              {/* Remove */}
               {(file.status === "done" || file.status === "error") && (
                 <button
                   onClick={() => removeFile(idx)}
-                  className="text-gray-400 hover:text-red-500 text-xs ml-3 shrink-0"
+                  className="text-zinc-500 hover:text-red-500 text-xs ml-3 shrink-0"
                 >
                   ✕
                 </button>
@@ -214,14 +220,16 @@ export default function UploadBox() {
         </div>
       )}
 
-      {/* Add progress animation to tailwind */}
       <style>{`
         @keyframes progress {
-          from { width: 0% }
-          to { width: 100% }
+          from {
+            width: 0%;
+          }
+          to {
+            width: 100%;
+          }
         }
       `}</style>
-
     </div>
   );
 }
