@@ -25,7 +25,23 @@ export default function ChatBox() {
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-
+      if (data.type === "metrics") {
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last?.role === "assistant") {
+          updated[updated.length - 1] = {
+            ...last,
+            metrics: {
+              response_time_ms: data.response_time_ms,
+              chunks_retrieved: data.chunks_retrieved,
+              compression_ratio: data.compression_ratio,
+            }
+          };
+        }
+        return updated;
+      });
+    }
       if (data.type === "token") {
         setMessages((prev) => {
           const updated = [...prev];

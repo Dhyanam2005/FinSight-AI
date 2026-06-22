@@ -1,7 +1,7 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
-
-from app.services.gemini_service import model  # ✅ single import
+import time
+from app.services.gemini_service import model
 import app.store as store
 from app.rag.query_rewriter import rewrite_query
 from app.rag.hybrid_retriever import hybrid_search
@@ -25,9 +25,19 @@ async def websocket_chat(websocket: WebSocket):
     try:
         while True:
             query = await websocket.receive_text()
+            start_time = time.time()
 
             print("\n===== USER QUERY =====")
             print(query)
+
+            # No PDFs uploaded at all
+            if store.vector_db is None:
+                await websocket.send_text(json.dumps({
+                    "type": "token",
+                    "content": "⚠️ No documents uploaded yet. Please upload a financial PDF first."
+                }))
+                await websocket.send_text(json.dumps({"type": "end"}))
+                continue
 
             companies = extract_companies(query)
             metrics   = extract_metrics(query)
@@ -49,24 +59,25 @@ async def websocket_chat(websocket: WebSocket):
             print(enhanced)
 
             final_query = rewrite_query(enhanced)
-
             print("\n===== FINAL REWRITTEN QUERY =====")
             print(final_query)
 
-            retrieved_chunks = hybrid_search(final_query)
+            retrieved_chunks, compression_ratio = hybrid_search(final_query)
+
             if not retrieved_chunks or all(
-                len(chunk.page_content.strip()) == 0 
+                len(chunk.page_content.strip()) == 0
                 for chunk in retrieved_chunks
             ):
-                companies = list(store.uploaded_companies)
-                loaded = ", ".join(companies) if companies else "None"
-                
+                loaded_companies = list(store.uploaded_companies)
+                loaded = ", ".join(loaded_companies) if loaded_companies else "None"
+
                 await websocket.send_text(json.dumps({
                     "type": "token",
-                    "content": f"I couldn't find relevant information in your uploaded documents.\n\n**Currently loaded:** {loaded}\n\nTry asking specific questions like:\n- 'What is {companies[0] if companies else 'company'} revenue trend?'\n- 'Explain risks for {companies[0] if companies else 'company'}'\n- 'Compare margins across quarters'"
+                    "content": f"I couldn't find relevant information in your uploaded documents.\n\n**Currently loaded:** {loaded}\n\nTry asking specific questions like:\n- 'What is {loaded_companies[0] if loaded_companies else 'company'} revenue trend?'\n- 'Explain risks for {loaded_companies[0] if loaded_companies else 'company'}'\n- 'Compare margins across quarters'"
                 }))
                 await websocket.send_text(json.dumps({"type": "end"}))
                 continue
+
             print("\n===== RETRIEVED CHUNKS =====")
             print(retrieved_chunks)
 
@@ -137,11 +148,9 @@ USER QUESTION:
 """
 
             try:
-                # ✅ Non-streaming via gemini_service wrapper
                 response = model.generate_content(prompt)
                 full_text = response.text
 
-                # Stream word by word to frontend
                 words = full_text.split(" ")
                 for word in words:
                     await websocket.send_text(
@@ -151,9 +160,16 @@ USER QUESTION:
                         })
                     )
 
-                await websocket.send_text(
-                    json.dumps({"type": "end"})
-                )
+                # Send metrics after response
+                response_time_ms = round((time.time() - start_time) * 1000)
+                await websocket.send_text(json.dumps({
+                    "type": "metrics",
+                    "response_time_ms": response_time_ms,
+                    "chunks_retrieved": len(retrieved_chunks),
+                    "compression_ratio": compression_ratio,
+                }))
+
+                await websocket.send_text(json.dumps({"type": "end"}))
 
             except WebSocketDisconnect:
                 print("Client disconnected during streaming")
@@ -162,12 +178,10 @@ USER QUESTION:
             except Exception as e:
                 print(f"Streaming error: {e}")
                 try:
-                    await websocket.send_text(
-                        json.dumps({
-                            "type": "error",
-                            "content": "An error occurred while generating the response."
-                        })
-                    )
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "content": "An error occurred while generating the response."
+                    }))
                 except Exception:
                     pass
 
@@ -177,11 +191,9 @@ USER QUESTION:
     except Exception as e:
         print(f"WebSocket fatal error: {e}")
         try:
-            await websocket.send_text(
-                json.dumps({
-                    "type": "error",
-                    "content": "A server error occurred."
-                })
-            )
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "content": "A server error occurred."
+            }))
         except Exception:
             pass

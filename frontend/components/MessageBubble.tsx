@@ -76,6 +76,26 @@ export default function MessageBubble({ message }: Props) {
           )}
         </div>
 
+        {/* RAG Metrics */}
+        {!isUser && message.metrics && (
+          <div className="flex flex-wrap gap-4 mt-1 text-xs text-zinc-500">
+            <span>
+              ⚡ {message.metrics.response_time_ms}ms
+            </span>
+
+            <span>
+              📄 {message.metrics.chunks_retrieved} chunks
+            </span>
+
+            {message.metrics.compression_ratio !== undefined && (
+              <span>
+                🗜️ {message.metrics.compression_ratio}x compressed
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Citations */}
         {!isUser &&
           message.sources?.map((source, idx) => (
             <CitationCard key={idx} source={source} />
