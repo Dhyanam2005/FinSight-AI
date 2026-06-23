@@ -93,6 +93,27 @@ function riskBadge(level: string) {
   return "bg-green-900/50 text-green-300 border border-green-800";
 }
 
+// ── Skeleton loader ──
+function SkeletonCard() {
+  return (
+    <div className="bg-[#2f2f2f] border border-zinc-800 rounded-xl p-4 animate-pulse">
+      <div className="h-3 bg-zinc-700 rounded w-1/2 mb-3" />
+      <div className="h-7 bg-zinc-700 rounded w-1/3" />
+    </div>
+  );
+}
+
+function SkeletonSection() {
+  return (
+    <section>
+      <div className="h-3 bg-zinc-800 rounded w-32 mb-3 animate-pulse" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardPage() {
   const [kpis, setKpis] = useState<KPIData | null>(null);
   const [comparisonData, setComparisonData] = useState<ComparisonRow[]>([]);
@@ -101,6 +122,7 @@ export default function DashboardPage() {
   const [scores, setScores] = useState<ScoreData[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [thesis, setThesis] = useState<Record<string, string>>({});
   const [thesisLoading, setThesisLoading] = useState<Record<string, boolean>>({});
 
@@ -108,16 +130,19 @@ export default function DashboardPage() {
     fetchDashboard();
     const interval = setInterval(fetchDashboard, 30000);
     window.addEventListener("session-reset", fetchDashboard);
+    window.addEventListener("pdf-uploaded", fetchDashboard);
     return () => {
       clearInterval(interval);
       window.removeEventListener("session-reset", fetchDashboard);
+      window.removeEventListener("pdf-uploaded", fetchDashboard);
     };
   }, []);
 
   async function fetchDashboard() {
     try {
+      setError(null);
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/dashboard`);
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
       setKpis(data.kpis || null);
       setComparisonData(data.comparison_table || []);
@@ -127,6 +152,7 @@ export default function DashboardPage() {
       setUploadedFiles(data.uploaded_files || []);
     } catch (e) {
       console.error("Dashboard fetch failed:", e);
+      setError("Failed to load dashboard. Is the backend running?");
     } finally {
       setLoading(false);
     }
@@ -161,10 +187,60 @@ export default function DashboardPage() {
     });
   });
 
+  // ── Loading skeleton ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#212121] text-white flex items-center justify-center">
-        <p className="text-zinc-400 text-sm animate-pulse">Loading dashboard...</p>
+      <div className="min-h-screen bg-[#212121] text-white">
+        <div className="border-b border-zinc-700 px-6 py-4 flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-white">FinSight AI Dashboard</h1>
+          <div className="h-4 w-32 bg-zinc-800 rounded animate-pulse" />
+        </div>
+        <div className="max-w-6xl mx-auto px-6 py-8 space-y-10">
+          <SkeletonSection />
+          <SkeletonSection />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error state ──
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#212121] text-white flex flex-col items-center justify-center gap-4">
+        <p className="text-4xl">⚠️</p>
+        <p className="text-zinc-300 font-semibold">{error}</p>
+        <button
+          onClick={fetchDashboard}
+          className="text-sm bg-white text-black px-4 py-2 rounded-lg hover:bg-zinc-200 transition"
+        >
+          Try Again
+        </button>
+        <a href="/" className="text-zinc-500 text-sm hover:text-white transition">
+          ← Back to Chat
+        </a>
+      </div>
+    );
+  }
+
+  // ── Empty state ──
+  if (uploadedFiles.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#212121] text-white">
+        <div className="border-b border-zinc-700 px-6 py-4 flex items-center justify-between sticky top-0 bg-[#212121] z-10">
+          <h1 className="text-xl font-semibold text-white">FinSight AI Dashboard</h1>
+          <a href="/" className="text-sm text-zinc-400 hover:text-white transition px-3 py-1">
+            ← Chat
+          </a>
+        </div>
+        <div className="flex flex-col items-center justify-center h-[80vh] gap-4">
+          <p className="text-4xl">📊</p>
+          <p className="text-zinc-300 font-semibold">No documents uploaded yet</p>
+          <p className="text-zinc-500 text-sm">Upload a financial PDF in the chat to see analysis here.</p>
+          <a href="/"
+            className="text-sm bg-white text-black px-4 py-2 rounded-lg hover:bg-zinc-200 transition">
+            ← Upload a PDF
+          </a>
+        </div>
       </div>
     );
   }
@@ -172,12 +248,11 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#212121] text-white">
 
-      {/* HEADER — matches chat page */}
+      {/* HEADER */}
       <div className="border-b border-zinc-700 px-6 py-4 flex items-center justify-between sticky top-0 bg-[#212121] z-10">
         <h1 className="text-xl font-semibold text-white">FinSight AI Dashboard</h1>
         <div className="flex gap-2">
-          <a href="/"
-            className="text-sm text-zinc-400 hover:text-white transition px-3 py-1">
+          <a href="/" className="text-sm text-zinc-400 hover:text-white transition px-3 py-1">
             ← Chat
           </a>
           <button onClick={fetchDashboard}
@@ -194,27 +269,25 @@ export default function DashboardPage() {
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-10">
 
         {/* UPLOADED DOCUMENTS */}
-        {uploadedFiles.length > 0 && (
-          <section>
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-              Loaded Documents ({uploadedFiles.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {uploadedFiles.map((file, idx) => (
-                <div key={idx}
-                  className="bg-[#2f2f2f] border border-zinc-700 rounded-xl px-4 py-3 flex items-center gap-3">
-                  <span className="text-xl shrink-0">📄</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm truncate text-white">{file.filename}</p>
-                    <p className="text-zinc-400 text-xs">{file.company}</p>
-                    <p className="text-zinc-500 text-xs">{file.quarters} quarters · {file.pages} pages</p>
-                  </div>
-                  <span className="text-green-400 text-sm shrink-0">✅</span>
+        <section>
+          <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+            Loaded Documents ({uploadedFiles.length})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {uploadedFiles.map((file, idx) => (
+              <div key={idx}
+                className="bg-[#2f2f2f] border border-zinc-700 rounded-xl px-4 py-3 flex items-center gap-3">
+                <span className="text-xl shrink-0">📄</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate text-white">{file.filename}</p>
+                  <p className="text-zinc-400 text-xs">{file.company}</p>
+                  <p className="text-zinc-500 text-xs">{file.quarters} quarters · {file.pages} pages</p>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+                <span className="text-green-400 text-sm shrink-0">✅</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
         {/* KPI CARDS */}
         {kpis && (
@@ -229,8 +302,7 @@ export default function DashboardPage() {
                 { label: "Avg Revenue Growth", value: `${kpis.avg_revenue_growth?.toFixed(2)}%` },
                 { label: "Avg Operating Margin", value: `${kpis.avg_operating_margin?.toFixed(2)}%` },
               ].map((kpi) => (
-                <div key={kpi.label}
-                  className="bg-[#2f2f2f] border border-zinc-700 rounded-xl p-4">
+                <div key={kpi.label} className="bg-[#2f2f2f] border border-zinc-700 rounded-xl p-4">
                   <p className="text-zinc-400 text-xs mb-1">{kpi.label}</p>
                   <p className="text-2xl font-bold text-white">{kpi.value}</p>
                 </div>
@@ -390,8 +462,7 @@ export default function DashboardPage() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {sentiments.map((item, idx) => (
-                <div key={idx}
-                  className="bg-[#2f2f2f] border border-zinc-700 rounded-xl p-4">
+                <div key={idx} className="bg-[#2f2f2f] border border-zinc-700 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-white">{item.company}</h3>
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${
@@ -461,8 +532,7 @@ export default function DashboardPage() {
               const latest = actual[actual.length - 1];
               if (!latest) return null;
               return (
-                <div key={company}
-                  className="bg-[#2f2f2f] border border-zinc-700 rounded-xl p-5">
+                <div key={company} className="bg-[#2f2f2f] border border-zinc-700 rounded-xl p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-white">{company}</h3>
                     <div className="flex gap-2">
@@ -476,8 +546,7 @@ export default function DashboardPage() {
                   <p className="text-zinc-500 text-xs mb-3">Latest: {latest.quarter}</p>
                   <div className="space-y-2 mb-4">
                     {latest.insights?.map((insight, i) => (
-                      <div key={i}
-                        className="bg-zinc-800 rounded-lg p-3 text-zinc-200 text-sm">
+                      <div key={i} className="bg-zinc-800 rounded-lg p-3 text-zinc-200 text-sm">
                         {insight}
                       </div>
                     ))}

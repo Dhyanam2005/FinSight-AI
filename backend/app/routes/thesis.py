@@ -16,7 +16,7 @@ async def generate_thesis(req: ThesisRequest):
     company = req.company
 
     # ── Pull context from RAG ──────────────
-    docs = hybrid_search(f"{company} revenue margin growth risks strategy", top_k=6)
+    docs, _ = hybrid_search(f"{company} revenue margin growth risks strategy", top_k=6)
     context = "\n".join([d.page_content for d in docs])
 
     # ── Pull store data ────────────────────

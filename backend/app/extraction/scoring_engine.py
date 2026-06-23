@@ -30,13 +30,13 @@ def calculate_company_scores():
                 pass
 
         # ── Risk score ─────────────────────
-        num_risks  = len(item.get("key_risks", []))
+        num_risks = len(item.get("key_risks") or [])
         risk_score = max(1, 10 - num_risks)
 
         # ── Innovation score ───────────────
         innovation_score      = 5
-        strategic_highlights  = item.get("strategic_highlights", [])
-        innovation_score     += min(5, len(strategic_highlights))
+        strategic_highlights = item.get("strategic_highlights") or []
+        innovation_score += min(5, len(strategic_highlights))
 
         rg = revenue_growth if isinstance(revenue_growth, (int, float)) else 0
         om = item.get("operating_margin") or 0

@@ -14,9 +14,31 @@ import app.store as store
 
 router = APIRouter()
 UPLOAD_DIR = "uploads"
-
-# Threshold — use large PDF extractor above this
 LARGE_PDF_CHAR_THRESHOLD = 15000
+
+# ── Filename-based company detection fallback ──
+FILENAME_COMPANY_MAP = {
+    "nvidia": "Nvidia",
+    "tesla": "Tesla",
+    "apple": "Apple",
+    "amd": "Amd",
+    "bmw": "Bmw",
+    "mercedes": "Mercedes",
+    "microsoft": "Microsoft",
+    "google": "Google",
+    "alphabet": "Alphabet",
+    "amazon": "Amazon",
+    "meta": "Meta",
+    "netflix": "Netflix",
+}
+
+
+def detect_company_from_filename(filename: str) -> str:
+    filename_lower = filename.lower()
+    for keyword, company in FILENAME_COMPANY_MAP.items():
+        if keyword in filename_lower:
+            return company
+    return "Unknown"
 
 
 @router.post("/upload")
@@ -29,7 +51,6 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     # ====================================
     # 1. PDF PARSING + SENTIMENT
-    # FinBERT sentiment — no LLM call
     # ====================================
 
     result = extract_text_from_pdf(file_path)
@@ -41,22 +62,22 @@ async def upload_pdf(file: UploadFile = File(...)):
     print(sentiment)
 
     # ====================================
-    # 2. SINGLE LLM CALL — gets everything
-    # Company + quarters + metrics + risks
+    # 2. SINGLE LLM CALL
     # ====================================
 
     print("\n===== EXTRACTING ALL FINANCIAL DATA (SINGLE LLM CALL) =====")
 
     if len(full_text) > LARGE_PDF_CHAR_THRESHOLD:
-        # Large PDF — max 3 LLM calls
         financial_data = extract_all_financial_data_large(full_text)
     else:
-        # Small PDF — 1 LLM call
         financial_data = extract_all_financial_data(full_text)
 
     company_name = financial_data.get("company", "Unknown").strip().title()
+
+    # ── Fallback to filename if LLM returns Unknown ──
     if not company_name or company_name == "Unknown":
-        company_name = "Unknown"
+        company_name = detect_company_from_filename(file.filename)
+        print(f"\n===== COMPANY FROM FILENAME FALLBACK: {company_name} =====")
 
     quarters_data = financial_data.get("quarters", [])
     report_type = financial_data.get("report_type", "Unknown")
@@ -80,12 +101,11 @@ async def upload_pdf(file: UploadFile = File(...)):
     print(f"\n===== STORED {len(quarters_data)} QUARTERS =====")
 
     # ====================================
-    # 4. CHUNKING FOR RAG — no LLM needed
+    # 4. CHUNKING FOR RAG
     # ====================================
 
     chunks = chunk_documents(pages, file.filename)
 
-    # Override company in chunks with LLM-detected name
     for chunk in chunks:
         chunk["company"] = company_name
         chunk["report_type"] = report_type
@@ -104,7 +124,6 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     # ====================================
     # 6. STORE SENTIMENT
-    # Use first quarter name for sentiment
     # ====================================
 
     first_quarter = quarters_data[0].get("quarter", "Unknown") if quarters_data else "Unknown"

@@ -138,8 +138,7 @@ def analyze_trends():
         for idx, item in enumerate(items):
             revenue_growth   = revenue_growths[idx]
             operating_margin = operating_margins[idx]
-            num_risks        = len(item.get("key_risks", []))
-
+            num_risks = len(item.get("key_risks") or [])
             # ── Insights ──────────────────
             insights = []
             if revenue_growth < 0:

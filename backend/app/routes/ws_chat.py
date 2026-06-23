@@ -90,15 +90,16 @@ async def websocket_chat(websocket: WebSocket):
             context = "\n\n".join(context_parts)
 
             intent_instructions = {
-                "investment": "Give a clear invest / avoid / watch verdict with reasoning.",
-                "risk":       "Prioritize identifying red flags, stress indicators, and downside risks.",
-                "comparison": "Use a structured side-by-side analysis with a clear winner and why.",
-                "growth":     "Focus on revenue trajectory, margin expansion, and forward indicators.",
-                "summary":    "Give an executive-level summary a non-finance person can understand.",
+                "investment": "Give a clear invest / avoid / watch verdict with detailed reasoning across valuation, growth, and risk dimensions.",
+                "risk":       "Prioritize identifying red flags, stress indicators, and downside risks. Be exhaustive — list every concern with specific numbers.",
+                "comparison": "Use a structured side-by-side analysis with a clear winner and detailed reasoning for each metric.",
+                "growth":     "Focus on revenue trajectory, margin expansion, segment performance, and forward indicators with specific data points.",
+                "summary":    "Give a comprehensive executive-level summary covering all major financial dimensions — revenue, margins, cash flow, segments, risks, and outlook.",
+                "general":    "Provide a thorough, detailed analysis covering all aspects — revenue trends, margin analysis, cash flow, key segments, risks, and strategic outlook with specific numbers from the context.",
             }
             intent_hint = intent_instructions.get(
                 intent,
-                "Provide a thorough analyst-grade answer."
+                "Provide a comprehensive analyst-grade answer covering all relevant financial dimensions with specific numbers."
             )
 
             prompt = f"""You are a senior financial analyst with 15+ years of experience in equity research
@@ -114,31 +115,33 @@ and always focused on what the numbers mean for decisions.
 4. Use financial frameworks where relevant: DuPont, Altman Z-Score, working capital analysis.
 5. Always end with actionable insights — not just observations.
 6. If data is missing or insufficient, say so clearly instead of guessing.
+7. Be thorough and detailed — do not truncate or summarize too briefly.
 
 ## INTENT
 {intent_hint}
 
 ## RESPONSE FORMAT
 **📋 Summary**
-[2-3 sentence overview]
+[5-6 sentence comprehensive overview covering: revenue trend, profitability, key business segments, cash flow position, and one key forward-looking concern. Use specific numbers throughout.]
 
 **✅ Bull Case**
-[Strong positives — growth drivers, competitive moats, tailwinds]
+[3-4 detailed bullet points — growth drivers, competitive moats, tailwinds with specific numbers]
 
 **⚠️ Bear Case**
-[Headwinds, margin pressure, risks to the thesis]
+[3-4 detailed bullet points — headwinds, margin pressure, risks with specific numbers]
 
 **🚨 Red Flags**
-[Anomalies, concerning trends — be specific with numbers]
+[2-3 specific anomalies or concerning trends with exact numbers and YoY/QoQ comparisons]
 
 **🎯 Verdict**
-[Invest / Avoid / Watch + one-line reason]
+[Invest / Avoid / Watch + 2-3 sentence detailed reasoning]
 
 **💡 Follow-up Questions to Consider**
-[3 sharp questions the user should ask next]
+[3 sharp, specific questions the user should investigate next]
 
 ---
 Answer ONLY using the provided context. If context is insufficient, say so.
+Be detailed and thorough — a fund manager reading this needs complete information.
 
 CONTEXT:
 {context}

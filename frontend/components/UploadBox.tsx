@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import API from "@/lib/api";
 
 interface UploadedFile {
@@ -22,7 +22,13 @@ export default function UploadBox() {
   const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ Cycles through steps for a given file index
+  // ── Clear files on session reset ──
+  useEffect(() => {
+    const onReset = () => setUploadedFiles([]);
+    window.addEventListener("session-reset", onReset);
+    return () => window.removeEventListener("session-reset", onReset);
+  }, []);
+
   const cycleSteps = (fileIndex: number): NodeJS.Timeout => {
     let stepIndex = 0;
 
@@ -48,29 +54,24 @@ export default function UploadBox() {
     return interval;
   };
 
-  const handleUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
 
-    // ✅ Add new files to existing list
     const newFiles: UploadedFile[] = Array.from(files).map((f) => ({
       name: f.name,
       status: "pending",
       step: "Waiting...",
     }));
 
-    setUploadedFiles((prev) => [...prev, ...newFiles]);
-
     const startIndex = uploadedFiles.length;
+    setUploadedFiles((prev) => [...prev, ...newFiles]);
 
     for (let i = 0; i < files.length; i++) {
       const fileIndex = startIndex + i;
 
-      // Mark as processing
       setUploadedFiles((prev) => {
         const updated = [...prev];
         updated[fileIndex] = {
@@ -88,14 +89,11 @@ export default function UploadBox() {
         formData.append("file", files[i]);
 
         await API.post("/upload", formData, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
+          headers: { "Content-Type": "multipart/form-data" },
         });
 
         clearInterval(interval);
 
-        // Mark as done
         setUploadedFiles((prev) => {
           const updated = [...prev];
           updated[fileIndex] = {
@@ -105,6 +103,9 @@ export default function UploadBox() {
           };
           return updated;
         });
+
+        window.dispatchEvent(new Event("pdf-uploaded"));
+
       } catch (err) {
         clearInterval(interval);
         console.error(err);
@@ -121,7 +122,6 @@ export default function UploadBox() {
       }
     }
 
-    // Reset input so same file can be re-uploaded
     if (inputRef.current) inputRef.current.value = "";
     setIsUploading(false);
   };
@@ -150,18 +150,14 @@ export default function UploadBox() {
         Upload Financial Documents
       </h2>
 
-      {/* Drop zone */}
       <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-zinc-600 rounded-xl cursor-pointer hover:border-zinc-400 hover:bg-zinc-700/30 transition-all">
         <span className="text-3xl mb-1">📂</span>
-
         <span className="text-sm text-zinc-300">
           {isUploading ? "Uploading..." : "Click to upload PDFs"}
         </span>
-
         <span className="text-xs text-zinc-500 mt-1">
           You can keep adding more PDFs anytime
         </span>
-
         <input
           ref={inputRef}
           type="file"
@@ -173,7 +169,6 @@ export default function UploadBox() {
         />
       </label>
 
-      {/* File List */}
       {uploadedFiles.length > 0 && (
         <div className="mt-4 space-y-2">
           {uploadedFiles.map((file, idx) => (
@@ -183,12 +178,10 @@ export default function UploadBox() {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <span>{statusIcon(file.status)}</span>
-
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-white truncate max-w-[220px]">
                     {file.name}
                   </p>
-
                   <p className={`text-xs ${statusColor(file.status)}`}>
                     {file.status === "processing" ? (
                       <span className="animate-pulse">{file.step}</span>
@@ -199,14 +192,12 @@ export default function UploadBox() {
                 </div>
               </div>
 
-              {/* Progress Bar */}
               {file.status === "processing" && (
                 <div className="w-24 h-1.5 bg-zinc-700 rounded-full overflow-hidden mx-3">
                   <div className="h-full bg-white rounded-full animate-[progress_10s_linear_forwards]" />
                 </div>
               )}
 
-              {/* Remove */}
               {(file.status === "done" || file.status === "error") && (
                 <button
                   onClick={() => removeFile(idx)}
@@ -222,12 +213,8 @@ export default function UploadBox() {
 
       <style>{`
         @keyframes progress {
-          from {
-            width: 0%;
-          }
-          to {
-            width: 100%;
-          }
+          from { width: 0% }
+          to { width: 100% }
         }
       `}</style>
     </div>
