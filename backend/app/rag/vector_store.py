@@ -3,13 +3,21 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 
 import app.store as store
 
-embedding_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+# Lazy load — don't load at startup
+_embedding_model = None
+
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        print("Loading embedding model...")
+        _embedding_model = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+        print("Embedding model loaded.")
+    return _embedding_model
 
 
 def create_vector_store(chunks):
-
     texts = [chunk["text"] for chunk in chunks]
 
     metadatas = [
@@ -26,7 +34,7 @@ def create_vector_store(chunks):
 
     vector_store = FAISS.from_texts(
         texts=texts,
-        embedding=embedding_model,
+        embedding=get_embedding_model(),
         metadatas=metadatas
     )
 
@@ -34,7 +42,6 @@ def create_vector_store(chunks):
 
 
 def search_faiss(query, k=4):
-
     if store.vector_db is None:
         return []
 
