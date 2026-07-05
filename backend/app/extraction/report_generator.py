@@ -13,10 +13,8 @@ def generate_analyst_report(company):
     )
 
     # Retrieve additional context
-    docs = hybrid_search(
-
+    docs, _ = hybrid_search(
         f"{company} financial performance risks strategy",
-
         top_k=4
     )
 

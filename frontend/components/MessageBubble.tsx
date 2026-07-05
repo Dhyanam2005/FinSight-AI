@@ -76,22 +76,41 @@ export default function MessageBubble({ message }: Props) {
           )}
         </div>
 
-        {/* RAG Metrics */}
+        {/* RAG Pipeline Metrics */}
         {!isUser && message.metrics && (
-          <div className="flex flex-wrap gap-4 mt-1 text-xs text-zinc-500">
-            <span>
-              ⚡ {message.metrics.response_time_ms}ms
-            </span>
-
-            <span>
-              📄 {message.metrics.chunks_retrieved} chunks
-            </span>
-
-            {message.metrics.compression_ratio !== undefined && (
+          <div className="mt-2 text-[11px] text-zinc-600 space-y-1 font-mono">
+            {/* Pipeline flow */}
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-zinc-500">FAISS</span>
+              <span className="text-zinc-400 font-semibold">{message.metrics.faiss_chunks}</span>
+              <span className="text-zinc-700">+</span>
+              <span className="text-zinc-500">BM25</span>
+              <span className="text-zinc-400 font-semibold">{message.metrics.bm25_chunks}</span>
+              <span className="text-zinc-700 mx-1">→</span>
+              <span className="text-zinc-500">dedup</span>
+              <span className="text-zinc-400 font-semibold">{message.metrics.after_dedup}</span>
+              <span className="text-zinc-700 mx-1">→</span>
+              <span className="text-zinc-500">reranked</span>
+              <span className="text-zinc-400 font-semibold">{message.metrics.after_rerank}</span>
+            </div>
+            {/* Compression + latency */}
+            <div className="flex flex-wrap items-center gap-3">
               <span>
-                🗜️ {message.metrics.compression_ratio}x compressed
+                <span className="text-zinc-500">context </span>
+                <span className="text-zinc-400">{message.metrics.context_chars_before.toLocaleString()}</span>
+                <span className="text-zinc-700"> → </span>
+                <span className="text-zinc-400">{message.metrics.context_chars_after.toLocaleString()}</span>
+                <span className="text-zinc-500"> chars</span>
+                <span className="text-emerald-700 ml-1">
+                  ({Math.round((1 - message.metrics.compression_ratio) * 100)}% reduction)
+                </span>
               </span>
-            )}
+              <span className="text-zinc-700">·</span>
+              <span>
+                <span className="text-zinc-500">latency </span>
+                <span className="text-zinc-400">{message.metrics.response_time_ms.toLocaleString()}ms</span>
+              </span>
+            </div>
           </div>
         )}
 

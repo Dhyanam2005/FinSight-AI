@@ -1,17 +1,15 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from dotenv import load_dotenv
 import json
-import os
 
 import app.store as store
 
-from app.services.gemini_service import model  # ✅ single import
+from app.services.gemini_service import model
 
 from app.rag.hybrid_retriever import hybrid_search
 from app.rag.query_rewriter import rewrite_query
 
-from app.extraction.comparison_engine import compare_companies
+from app.extraction.comparison_engine import compare_companies, compare_all_pairs
 from app.extraction.report_generator import generate_analyst_report
 
 from app.memory.conversation_memory import (
@@ -27,86 +25,15 @@ from app.memory.conversation_memory import (
     get_memory,
 )
 
-load_dotenv()
-
 router = APIRouter()
 
 
-# =========================================
-# EXTRACT REAL METRICS FROM CONTEXT
-# =========================================
-
-def extract_metrics_from_context(context: str, company: str) -> dict:
-    prompt = f"""
-    Extract the following financial metrics for {company} from the context below.
-    Return ONLY a JSON object with these exact keys:
-    - revenue_growth (number, percentage, e.g. 12.5)
-    - operating_margin (number, percentage, e.g. 18.3)
-    - net_income_growth (number, percentage, e.g. 9.1)
-    - quarter (string, e.g. "Q3 FY2024")
-    - revenue (string, e.g. "12345 Cr")
-    - net_income (string, e.g. "1234 Cr")
-
-    Rules:
-    - If a value is not found in the context, use null.
-    - Return ONLY valid JSON. No explanation, no markdown, no backticks.
-
-    CONTEXT:
-    {context}
-    """
-
-    try:
-        response = model.generate_content(prompt)
-        text = (
-            response.text
-            .strip()
-            .replace("```json", "")
-            .replace("```", "")
-            .strip()
-        )
-        return json.loads(text)
-
-    except Exception as e:
-        print(f"[extract_metrics_from_context] Failed: {e}")
-        return {
-            "revenue_growth": None,
-            "operating_margin": None,
-            "net_income_growth": None,
-            "quarter": "Latest",
-            "revenue": None,
-            "net_income": None,
-        }
-
-
-# =========================================
-# DASHBOARD STORE UPDATE
-# =========================================
-
-def update_dashboard_store(companies, metrics, answer, context=""):
-    if not companies:
-        return
-
-    company = companies[0]
-    extracted = extract_metrics_from_context(context, company)
-    quarter = extracted.get("quarter", "Latest")
-
-    financial_entry = {
-        "company": company,
-        "quarter": quarter,
-        "revenue_growth": extracted.get("revenue_growth"),
-        "operating_margin": extracted.get("operating_margin"),
-        "net_income_growth": extracted.get("net_income_growth"),
-        "revenue": extracted.get("revenue"),
-        "net_income": extracted.get("net_income"),
-        "summary": answer[:300]
-    }
-
-    store.upsert_financial_entry(financial_entry)
-    store.uploaded_companies.add(company)
-
-
-def _has_meaningful_data(result: dict) -> bool:
-    if not result or not isinstance(result, dict):
+def _has_meaningful_data(result) -> bool:
+    if not result:
+        return False
+    if isinstance(result, str):
+        return len(result.strip()) > 50
+    if not isinstance(result, dict):
         return False
 
     companies_data = result.get("companies", {})
@@ -156,7 +83,16 @@ async def ask_question(req: QueryRequest):
                 metrics=metrics
             )
 
-            comparison_result = compare_companies(companies[0], companies[1])
+            if len(companies) == 2:
+                comparison_result = compare_companies(companies[0], companies[1])
+            else:
+                # 3+ companies — generate all pairwise comparisons
+                pairs = compare_all_pairs(companies)
+                sections = [
+                    f"## {p['company1']} vs {p['company2']}\n\n{p['comparison']}"
+                    for p in pairs
+                ]
+                comparison_result = "\n\n---\n\n".join(sections)
 
             if _has_meaningful_data(comparison_result):
                 return {
@@ -202,32 +138,31 @@ async def ask_question(req: QueryRequest):
         metrics=metrics
     )
 
-    top_k = 6 if len(companies) >= 2 else 4
-
-    rewritten_query = rewrite_query(query)
+    top_k = 8 if len(companies) >= 2 else 6
 
     print("\n===== ORIGINAL QUERY =====")
     print(query)
+
+    rewritten_query = rewrite_query(query)
     print("\n===== REWRITTEN QUERY =====")
     print(rewritten_query)
 
     enhanced = enrich_query(rewritten_query)
-
     print("\n===== ENHANCED QUERY =====")
     print(enhanced)
 
-    docs = hybrid_search(enhanced, top_k=top_k)
+    docs, pipeline_stats = hybrid_search(enhanced, top_k=top_k)
 
     if len(companies) >= 2:
         docs_text = " ".join(
-            d.get("text", "") + d.get("document", "")
+            d.page_content + d.metadata.get("document", "")
             for d in docs
         ).lower()
 
         missing = [c for c in companies if c.lower() not in docs_text]
 
         for company in missing:
-            extra = hybrid_search(
+            extra, _ = hybrid_search(
                 f"{company} operating margin financial results",
                 top_k=3
             )
@@ -253,9 +188,30 @@ async def ask_question(req: QueryRequest):
         "summary":    "Give an executive-level summary a non-finance person can understand.",
     }
 
-    intent_hint = intent_instructions.get(intent, "Provide a thorough analyst-grade answer.")
+    intent_hint = intent_instructions.get(intent, "")
 
-    prompt = f"""
+    # Factual / definitional queries get a concise answer, not the full Bull/Bear template
+    is_factual = intent in ("general", "summary") and len(query.split()) <= 12
+
+    if is_factual:
+        prompt = f"""
+    You are a senior financial analyst. Answer the question directly and concisely
+    using ONLY the data in the context below. State the key fact first, then add
+    one or two supporting details if relevant. Do not use headers or bullet points
+    unless the answer is naturally a list. Do not add investment verdicts or follow-up
+    questions unless the user explicitly asked for them.
+    If the data is not in the context, say so clearly.
+
+    {build_context_prompt()}
+
+    CONTEXT:
+    {context}
+
+    QUESTION:
+    {query}
+    """
+    else:
+        prompt = f"""
     You are a senior financial analyst with 15+ years of experience in equity research
     and corporate finance. You think like a fund manager — data-driven, skeptical,
     and always focused on what the numbers mean for decisions.
@@ -271,7 +227,7 @@ async def ask_question(req: QueryRequest):
     6. If data is missing or insufficient, say so clearly instead of guessing.
 
     ## INTENT
-    {intent_hint}
+    {intent_hint if intent_hint else "Provide a thorough analyst-grade answer."}
 
     ## RESPONSE FORMAT
     **📋 Summary**
@@ -304,13 +260,6 @@ async def ask_question(req: QueryRequest):
 
     response = model.generate_content(prompt)
 
-    update_dashboard_store(
-        companies,
-        metrics,
-        response.text,
-        context=context
-    )
-
     sources = [
         {
             "text": doc.page_content[:200],
@@ -325,4 +274,5 @@ async def ask_question(req: QueryRequest):
         "answer": response.text,
         "sources": sources,
         "mode": "rag",
+        "pipeline_stats": pipeline_stats,
     }

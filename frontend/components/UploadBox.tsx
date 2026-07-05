@@ -9,14 +9,6 @@ interface UploadedFile {
   step: string;
 }
 
-const STEPS = [
-  "Parsing PDF...",
-  "Chunking text...",
-  "Analyzing sentiment...",
-  "Building embeddings...",
-  "Indexing...",
-];
-
 export default function UploadBox() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -28,31 +20,6 @@ export default function UploadBox() {
     window.addEventListener("session-reset", onReset);
     return () => window.removeEventListener("session-reset", onReset);
   }, []);
-
-  const cycleSteps = (fileIndex: number): NodeJS.Timeout => {
-    let stepIndex = 0;
-
-    const interval = setInterval(() => {
-      stepIndex++;
-      if (stepIndex >= STEPS.length) {
-        clearInterval(interval);
-        return;
-      }
-
-      setUploadedFiles((prev) => {
-        const updated = [...prev];
-        if (updated[fileIndex]) {
-          updated[fileIndex] = {
-            ...updated[fileIndex],
-            step: STEPS[stepIndex],
-          };
-        }
-        return updated;
-      });
-    }, 2500);
-
-    return interval;
-  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -77,29 +44,27 @@ export default function UploadBox() {
         updated[fileIndex] = {
           ...updated[fileIndex],
           status: "processing",
-          step: STEPS[0],
+          step: "Processing…",
         };
         return updated;
       });
-
-      const interval = cycleSteps(fileIndex);
 
       try {
         const formData = new FormData();
         formData.append("file", files[i]);
 
-        await API.post("/upload", formData, {
+        const response = await API.post("/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
-        clearInterval(interval);
+        const isDuplicate = response.data?.duplicate === true;
 
         setUploadedFiles((prev) => {
           const updated = [...prev];
           updated[fileIndex] = {
             ...updated[fileIndex],
             status: "done",
-            step: "Ready!",
+            step: isDuplicate ? "Already loaded" : "Ready!",
           };
           return updated;
         });
@@ -107,7 +72,6 @@ export default function UploadBox() {
         window.dispatchEvent(new Event("pdf-uploaded"));
 
       } catch (err) {
-        clearInterval(interval);
         console.error(err);
 
         setUploadedFiles((prev) => {
@@ -126,7 +90,24 @@ export default function UploadBox() {
     setIsUploading(false);
   };
 
-  const removeFile = (index: number) => {
+  const [removingIndex, setRemovingIndex] = useState<number | null>(null);
+
+  const removeFile = async (index: number) => {
+    const file = uploadedFiles[index];
+
+    // Only call the backend if the file was actually processed (not a duplicate skip)
+    if (file.status === "done" && file.step !== "Already loaded") {
+      setRemovingIndex(index);
+      try {
+        await API.post("/remove", { filename: file.name });
+        window.dispatchEvent(new Event("pdf-uploaded")); // refresh dashboard
+      } catch (err) {
+        console.error("Failed to remove file from backend:", err);
+      } finally {
+        setRemovingIndex(null);
+      }
+    }
+
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -201,9 +182,11 @@ export default function UploadBox() {
               {(file.status === "done" || file.status === "error") && (
                 <button
                   onClick={() => removeFile(idx)}
-                  className="text-zinc-500 hover:text-red-500 text-xs ml-3 shrink-0"
+                  disabled={removingIndex === idx}
+                  className="text-zinc-500 hover:text-red-500 text-xs ml-3 shrink-0 disabled:opacity-40 disabled:cursor-wait"
+                  title={file.status === "done" ? "Remove from session" : "Dismiss"}
                 >
-                  ✕
+                  {removingIndex === idx ? "…" : "✕"}
                 </button>
               )}
             </div>

@@ -24,8 +24,9 @@ MAX_INTENTS: int = 16
 CONTEXT_MAX_CHARS: int = 800
 
 KNOWN_COMPANIES: List[str] = [
-    "bmw", "mercedes", "tesla", "nvidia",
-    "apple", "google", "amd", "amazon", "microsoft",
+    "tesla", "nvidia", "amd", "bmw", "mercedes",
+    "apple", "google", "alphabet", "amazon", "microsoft",
+    "meta", "netflix",
 ]
 
 FINANCIAL_METRICS: List[str] = [
@@ -35,14 +36,13 @@ FINANCIAL_METRICS: List[str] = [
 ]
 
 INTENT_LABELS: Dict[str, List[str]] = {
-    "comparison": ["compare", "vs", "versus", "difference between"],
-    "margin":     ["margin", "gross profit", "operating income"],
-    "risk":       ["risk", "downside", "headwind", "concern"],
-    "trend":      ["trend", "trajectory", "over time", "yoy", "qoq"],
-    "report":     ["analyst report", "equity report", "research report", "generate report"],
-    "valuation":  ["pe", "valuation", "price target", "fair value"],
-    "guidance":   ["guidance", "outlook", "forecast", "next quarter"],
-    "general":    [],
+    "comparison":  ["compare", "vs", "versus", "difference between"],
+    "risk":        ["risk", "downside", "headwind", "concern", "margin", "gross profit", "operating income"],
+    "investment":  ["invest", "buy", "sell", "hold", "pe", "valuation", "price target", "fair value"],
+    "growth":      ["growth", "trend", "trajectory", "over time", "yoy", "qoq", "guidance", "outlook", "forecast", "next quarter"],
+    "summary":     ["summary", "summarize", "overview", "explain", "what is", "tell me about"],
+    "report":      ["analyst report", "equity report", "research report", "generate report"],
+    "general":     [],
 }
 
 
@@ -240,8 +240,39 @@ def get_manager() -> MemoryManager:
 # ---------------------------------------------------------------------------
 
 def extract_companies(text: str) -> List[str]:
+    """
+    Detect company names mentioned in the query.
+
+    Priority order:
+    1. Match against companies actually uploaded in this session
+       (detected by LLM at upload time — works for any company worldwide)
+    2. Fall back to the hardcoded KNOWN_COMPANIES list for companies
+       mentioned before any upload (e.g. comparison query before upload)
+    """
     t = text.lower()
-    return [c.title() for c in KNOWN_COMPANIES if c in t]
+    found: List[str] = []
+
+    # ── Layer 1: dynamic — whatever the LLM found in the PDFs ──────────
+    try:
+        import app.store as _store
+        for company in _store.uploaded_companies:
+            # Match on the full company name OR any individual word in it
+            # e.g. "Reliance Industries" matches "reliance" or "reliance industries"
+            name_lower = company.lower()
+            words = name_lower.split()
+            if name_lower in t or any(w in t for w in words if len(w) > 3):
+                if company not in found:
+                    found.append(company)
+    except Exception:
+        pass
+
+    # ── Layer 2: static fallback — catches references before any upload ─
+    for c in KNOWN_COMPANIES:
+        canonical = c.title()
+        if c in t and canonical not in found:
+            found.append(canonical)
+
+    return found
 
 
 def extract_metrics(text: str) -> List[str]:

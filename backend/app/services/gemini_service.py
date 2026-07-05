@@ -130,10 +130,13 @@ class _CerebrasResponse:
 
 # ─── Gemini Wrapper ───────────────────────────────────
 class _GeminiModelWrapper:
+    def __init__(self):
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        self._model = genai.GenerativeModel(GEMINI_MODEL)
+
     def generate_content(self, prompt: str, **kwargs):
         global LLM_CALLS
-        import google.generativeai as genai
-
         LLM_CALLS += 1
 
         print("\n" + "=" * 60)
@@ -141,9 +144,7 @@ class _GeminiModelWrapper:
         print("Prompt Length:", len(prompt))
         print("=" * 60)
 
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        response = model.generate_content(prompt)
+        response = self._model.generate_content(prompt)
 
         print("Gemini Response Received")
         print("=" * 60)

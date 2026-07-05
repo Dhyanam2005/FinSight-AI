@@ -2,17 +2,44 @@ from app.rag.vector_store import search_faiss
 from app.rag.bm25_store import search_bm25
 from app.rag.reranker import rerank_chunks
 from app.rag.context_compressor import compress_context
-from app.rag.query_rewriter import rewrite_query
 
 
-def extract_company_filters(query):
-    companies = ["tesla", "nvidia", "amd", "bmw", "mercedes"]
-    query = query.lower()
-    matched_companies = []
-    for company in companies:
-        if company in query:
-            matched_companies.append(company.title())
-    return matched_companies
+_FALLBACK_COMPANIES = [
+    "tesla", "nvidia", "amd", "bmw", "mercedes",
+    "apple", "google", "alphabet", "amazon", "microsoft",
+    "meta", "netflix",
+]
+
+
+def extract_company_filters(query: str) -> list:
+    """
+    Build a company filter for chunk retrieval.
+
+    Matches against uploaded companies first (LLM-detected, any company),
+    then falls back to the hardcoded list.
+    """
+    q = query.lower()
+    found = []
+
+    # ── Dynamic: companies actually in the session ───────────────────
+    try:
+        import app.store as _store
+        for company in _store.uploaded_companies:
+            name_lower = company.lower()
+            words = name_lower.split()
+            if name_lower in q or any(w in q for w in words if len(w) > 3):
+                if company not in found:
+                    found.append(company)
+    except Exception:
+        pass
+
+    # ── Static fallback ──────────────────────────────────────────────
+    for c in _FALLBACK_COMPANIES:
+        canonical = c.title()
+        if c in q and canonical not in found:
+            found.append(canonical)
+
+    return found
 
 
 def extract_report_type_filter(query):
@@ -41,27 +68,21 @@ def extract_section_filters(query):
 
 
 def hybrid_search(query, top_k=5):
-
-    original_query = query
-    rewritten_query = rewrite_query(query)
-
-    print("\nOriginal Query:", original_query)
-    print("\nRewritten Query:", rewritten_query)
+    # Query should already be rewritten by the caller.
+    rewritten_query = query
 
     company_filters = extract_company_filters(query)
     report_filter = extract_report_type_filter(query)
     section_filters = extract_section_filters(query)
 
-    print("\nCompany Filters:", company_filters)
-    print("\nReport Type Filter:", report_filter)
-    print("\nSection Filters:", section_filters)
-
-    # Retrieve
-    faiss_results = search_faiss(query=rewritten_query, k=10)
-    bm25_results = search_bm25(query=rewritten_query, k=10)
+    # Retrieve — use k=20 so specialised pages (cash flow, risks, etc.)
+    # are not crowded out by high-tf popular pages
+    faiss_results = search_faiss(query=rewritten_query, k=20)
+    bm25_results = search_bm25(query=rewritten_query, k=20)
     combined_results = faiss_results + bm25_results
 
     # Filter
+    filter_active = bool(company_filters or report_filter or section_filters)
     filtered_results = []
     for chunk in combined_results:
         metadata = chunk.metadata
@@ -73,17 +94,13 @@ def hybrid_search(query, top_k=5):
             continue
         filtered_results.append(chunk)
 
-    # Fallback if filters too strict
     if not filtered_results:
-        print("\n===== NO FILTERED RESULTS — USING UNFILTERED =====")
         filtered_results = combined_results
-
-    combined_results = filtered_results
 
     # Deduplicate
     unique_results = []
     seen = set()
-    for chunk in combined_results:
+    for chunk in filtered_results:
         content = chunk.page_content
         if content not in seen:
             seen.add(content)
@@ -96,21 +113,36 @@ def hybrid_search(query, top_k=5):
         top_k=top_k
     )
 
-    # Compress
+    # Compress — measure chars before and after
+    chars_before = sum(len(c.page_content) for c in reranked_results)
     chunk_texts = [chunk.page_content for chunk in reranked_results]
     compressed_chunks, compression_ratio = compress_context(
         query=rewritten_query,
         chunks=chunk_texts
     )
+    chars_after = sum(len(c) for c in compressed_chunks)
 
-    print("\n===== COMPRESSED CONTEXT =====")
-    for chunk in compressed_chunks:
-        print(chunk)
-        print("\n----------------------\n")
-
-    # Replace with compressed
+    # Replace page content with compressed versions
     for i, chunk in enumerate(reranked_results):
         chunk.page_content = compressed_chunks[i]
 
-    # ✅ Return both results AND compression ratio
-    return reranked_results, compression_ratio
+    pipeline_stats = {
+        "faiss_chunks": len(faiss_results),
+        "bm25_chunks": len(bm25_results),
+        "total_retrieved": len(faiss_results) + len(bm25_results),
+        "after_filter": len(filtered_results),
+        "after_dedup": len(unique_results),
+        "after_rerank": len(reranked_results),
+        "context_chars_before": chars_before,
+        "context_chars_after": chars_after,
+        "compression_ratio": compression_ratio,
+        "filter_applied": filter_active,
+    }
+
+    print(
+        f"\n[RAG] {pipeline_stats['faiss_chunks']} FAISS + {pipeline_stats['bm25_chunks']} BM25"
+        f" → dedup {pipeline_stats['after_dedup']} → rerank {pipeline_stats['after_rerank']}"
+        f" → {chars_before}→{chars_after} chars ({round((1 - compression_ratio) * 100)}% reduction)"
+    )
+
+    return reranked_results, pipeline_stats

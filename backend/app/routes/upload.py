@@ -43,8 +43,22 @@ def detect_company_from_filename(filename: str) -> str:
 
 @router.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
+    from fastapi import HTTPException
 
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    safe_filename = os.path.basename(file.filename or "upload.pdf")
+    if not safe_filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    # Early duplicate check — skip all processing if already loaded
+    if any(f["filename"] == safe_filename for f in store.uploaded_files):
+        return {
+            "filename": safe_filename,
+            "message": "File already uploaded — using existing data.",
+            "duplicate": True,
+            "uploaded_companies": list(store.uploaded_companies),
+        }
+
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -76,7 +90,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     # ── Fallback to filename if LLM returns Unknown ──
     if not company_name or company_name == "Unknown":
-        company_name = detect_company_from_filename(file.filename)
+        company_name = detect_company_from_filename(safe_filename)
         print(f"\n===== COMPANY FROM FILENAME FALLBACK: {company_name} =====")
 
     quarters_data = financial_data.get("quarters", [])
@@ -104,15 +118,28 @@ async def upload_pdf(file: UploadFile = File(...)):
     # 4. CHUNKING FOR RAG
     # ====================================
 
-    chunks = chunk_documents(pages, file.filename)
+    chunks = chunk_documents(pages, safe_filename)
+
+    # Use the LLM-extracted first quarter label (more reliable than filename regex)
+    first_quarter = quarters_data[0].get("quarter", "Unknown") if quarters_data else "Unknown"
 
     for chunk in chunks:
         chunk["company"] = company_name
         chunk["report_type"] = report_type
+        chunk["quarter"] = first_quarter
 
     # ====================================
     # 5. BUILD VECTOR STORE + BM25
     # ====================================
+
+    # Track chunks per file so individual files can be removed later
+    store.chunks_by_file[safe_filename] = {
+        "company": company_name,
+        "chunks": chunks,
+    }
+
+    # New upload invalidates cached pairwise comparisons
+    store.comparison_cache.clear()
 
     new_vector_store = create_vector_store(chunks)
     create_bm25_store(chunks)
@@ -126,38 +153,35 @@ async def upload_pdf(file: UploadFile = File(...)):
     # 6. STORE SENTIMENT
     # ====================================
 
-    first_quarter = quarters_data[0].get("quarter", "Unknown") if quarters_data else "Unknown"
 
-    existing_sentiment = any(
-        s.get("company") == company_name
-        for s in store.financial_sentiments
-    )
+    new_sentiment = {
+        "company": company_name,
+        "quarter": first_quarter,
+        "sentiment": sentiment["sentiment"],
+        "score": sentiment["score"],
+        "tone": sentiment["tone"]
+    }
 
-    if not existing_sentiment:
-        store.financial_sentiments.append({
-            "company": company_name,
-            "quarter": first_quarter,
-            "sentiment": sentiment["sentiment"],
-            "score": sentiment["score"],
-            "tone": sentiment["tone"]
-        })
+    # Upsert: replace existing entry for this company so re-uploads refresh sentiment
+    updated = False
+    for idx, s in enumerate(store.financial_sentiments):
+        if s.get("company") == company_name:
+            store.financial_sentiments[idx] = new_sentiment
+            updated = True
+            break
+    if not updated:
+        store.financial_sentiments.append(new_sentiment)
 
     # ====================================
     # 7. TRACK UPLOADED FILES
     # ====================================
 
-    already_exists = any(
-        f["filename"] == file.filename
-        for f in store.uploaded_files
-    )
-
-    if not already_exists:
-        store.uploaded_files.append({
-            "filename": file.filename,
-            "company": company_name,
-            "quarters": len(quarters_data),
-            "pages": len(pages)
-        })
+    store.uploaded_files.append({
+        "filename": safe_filename,
+        "company": company_name,
+        "quarters": len(quarters_data),
+        "pages": len(pages)
+    })
 
     # ====================================
     # DEBUG
@@ -169,7 +193,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     print(store.uploaded_companies)
 
     return {
-        "filename": file.filename,
+        "filename": safe_filename,
         "company": company_name,
         "num_pages": len(pages),
         "num_chunks": len(chunks),

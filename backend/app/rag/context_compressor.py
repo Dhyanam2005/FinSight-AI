@@ -2,17 +2,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 
-# Lazy load — don't load at startup
-_embedding_model = None
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        from sentence_transformers import SentenceTransformer
-        print("Loading compression embedding model...")
-        _embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        print("Compression embedding model loaded.")
-    return _embedding_model
+from app.rag.vector_store import get_embedding_model
 
 
 def split_into_sentences(text):
@@ -25,9 +15,10 @@ def compress_chunk(query, chunk, top_k=3):
     if not sentences:
         return chunk
 
-    model = get_embedding_model()
-    query_embedding = model.encode([query])
-    sentence_embeddings = model.encode(sentences)
+    # .client is the underlying SentenceTransformer inside HuggingFaceEmbeddings
+    st_model = get_embedding_model().client
+    query_embedding = st_model.encode([query])
+    sentence_embeddings = st_model.encode(sentences)
     similarities = cosine_similarity(query_embedding, sentence_embeddings)[0]
     top_indices = np.argsort(similarities)[::-1][:top_k]
     compressed_sentences = [sentences[i] for i in sorted(top_indices)]

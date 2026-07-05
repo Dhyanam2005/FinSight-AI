@@ -3,6 +3,8 @@ structured_financial_data = []
 financial_sentiments = []
 uploaded_companies = set()
 uploaded_files = []
+chunks_by_file = {}       # filename → {"company": str, "chunks": list}
+comparison_cache = {}     # frozenset({c1, c2}) → comparison text
 
 
 def get_company_financials(company: str) -> list:

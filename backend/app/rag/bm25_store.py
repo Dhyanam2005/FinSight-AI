@@ -20,6 +20,12 @@ def create_bm25_store(chunks):
     bm25 = BM25Okapi(tokenized_chunks)
 
 
+def clear_bm25_store():
+    global bm25, documents
+    bm25 = None
+    documents = []
+
+
 def search_bm25(query, k=4):
 
     global bm25
@@ -49,7 +55,11 @@ def search_bm25(query, k=4):
                 page_content=chunk["text"],
                 metadata={
                     "page": chunk["page"],
-                    "document": chunk["document"]
+                    "document": chunk["document"],
+                    "company": chunk.get("company", ""),
+                    "report_type": chunk.get("report_type", ""),
+                    "quarter": chunk.get("quarter", ""),
+                    "section": chunk.get("section", ""),
                 }
             )
         )

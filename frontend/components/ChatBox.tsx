@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import MessageBubble from "./MessageBubble";
 import { Message } from "@/types/chat";
+
+const WS_URL = `${process.env.NEXT_PUBLIC_WS_URL}/ws/chat`;
+const RECONNECT_MAX_DELAY_MS = 16000;
 
 export default function ChatBox() {
   const [question, setQuestion] = useState("");
@@ -10,30 +13,34 @@ export default function ChatBox() {
   const [loading, setLoading] = useState(false);
   const [hasUpload, setHasUpload] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [wsStatus, setWsStatus] = useState<"connecting" | "open" | "closed">("connecting");
 
   const socket = useRef<WebSocket | null>(null);
-  const isConnected = useRef(false);
+  const reconnectDelay = useRef(1000);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const unmounted = useRef(false);
 
-  // ── Auto scroll to bottom ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // ── Toast helper ──
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
-  useEffect(() => {
-    if (isConnected.current) return;
-    isConnected.current = true;
+  const connect = useCallback(() => {
+    if (unmounted.current) return;
 
-    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WS_URL}/ws/chat`);
+    setWsStatus("connecting");
+    const ws = new WebSocket(WS_URL);
     socket.current = ws;
 
-    ws.onopen = () => console.log("WebSocket Connected");
+    ws.onopen = () => {
+      console.log("WebSocket Connected");
+      setWsStatus("open");
+      reconnectDelay.current = 1000;
+    };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -47,10 +54,29 @@ export default function ChatBox() {
               ...last,
               metrics: {
                 response_time_ms: data.response_time_ms,
-                chunks_retrieved: data.chunks_retrieved,
+                faiss_chunks: data.faiss_chunks,
+                bm25_chunks: data.bm25_chunks,
+                total_retrieved: data.total_retrieved,
+                after_filter: data.after_filter,
+                after_dedup: data.after_dedup,
+                after_rerank: data.after_rerank,
+                context_chars_before: data.context_chars_before,
+                context_chars_after: data.context_chars_after,
                 compression_ratio: data.compression_ratio,
-              }
+                filter_applied: data.filter_applied,
+              },
             };
+          }
+          return updated;
+        });
+      }
+
+      if (data.type === "sources") {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last?.role === "assistant") {
+            updated[updated.length - 1] = { ...last, sources: data.sources };
           }
           return updated;
         });
@@ -94,13 +120,25 @@ export default function ChatBox() {
 
     ws.onclose = () => {
       console.log("WebSocket Closed");
-      isConnected.current = false;
+      setWsStatus("closed");
+      setLoading(false);
+      if (!unmounted.current) {
+        const delay = reconnectDelay.current;
+        reconnectDelay.current = Math.min(delay * 2, RECONNECT_MAX_DELAY_MS);
+        setTimeout(connect, delay);
+      }
     };
-
-    return () => { ws.close(); };
   }, []);
 
-  // ── Listen for PDF upload and session reset ──
+  useEffect(() => {
+    unmounted.current = false;
+    connect();
+    return () => {
+      unmounted.current = true;
+      socket.current?.close();
+    };
+  }, [connect]);
+
   useEffect(() => {
     const onUpload = () => {
       setHasUpload(true);
@@ -120,7 +158,7 @@ export default function ChatBox() {
   const askQuestion = () => {
     if (!question.trim()) return;
     if (!socket.current || socket.current.readyState !== WebSocket.OPEN) {
-      console.error("WebSocket not connected");
+      showToast("⚠️ Not connected — reconnecting…");
       return;
     }
 
@@ -146,18 +184,25 @@ export default function ChatBox() {
     window.dispatchEvent(new Event("session-reset"));
   };
 
+  const isReady = wsStatus === "open" && hasUpload;
+
   return (
     <div className="flex flex-col h-[calc(100vh-220px)]">
 
-      {/* Toast notification */}
       {toast && (
         <div className="fixed top-4 right-4 z-50 bg-zinc-800 border border-zinc-600 text-white text-sm px-4 py-2 rounded-xl shadow-lg animate-fade-in">
           {toast}
         </div>
       )}
 
-      {/* New Chat button */}
-      <div className="flex justify-end mb-3">
+      <div className="flex justify-between items-center mb-3">
+        {wsStatus === "closed" && (
+          <span className="text-xs text-red-400 animate-pulse">● Reconnecting…</span>
+        )}
+        {wsStatus === "connecting" && (
+          <span className="text-xs text-yellow-400 animate-pulse">● Connecting…</span>
+        )}
+        {wsStatus === "open" && <span />}
         <button
           onClick={startNewChat}
           className="text-xs text-zinc-400 hover:text-white border border-zinc-700 px-3 py-1 rounded-lg transition"
@@ -166,7 +211,6 @@ export default function ChatBox() {
         </button>
       </div>
 
-      {/* Messages area */}
       <div className="flex-1 overflow-y-auto space-y-6 pb-4 px-2">
 
         {messages.length === 0 && (
@@ -193,20 +237,18 @@ export default function ChatBox() {
           </div>
         )}
 
-        {/* Auto scroll anchor */}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
       <div className="mt-4">
         <div className={`flex items-end gap-3 bg-[#2f2f2f] border rounded-2xl px-4 py-3 transition ${
-          hasUpload ? "border-zinc-700" : "border-zinc-800 opacity-60"
+          isReady ? "border-zinc-700" : "border-zinc-800 opacity-60"
         }`}>
           <textarea
             className="flex-1 bg-transparent text-white placeholder-zinc-500 resize-none focus:outline-none text-sm leading-relaxed max-h-40 disabled:cursor-not-allowed"
             rows={1}
             value={question}
-            disabled={!hasUpload || loading}
+            disabled={!isReady || loading}
             onChange={(e) => {
               setQuestion(e.target.value);
               e.target.style.height = "auto";
@@ -214,14 +256,16 @@ export default function ChatBox() {
             }}
             onKeyDown={handleKeyDown}
             placeholder={
-              hasUpload
-                ? "Ask about risks, revenue, growth..."
-                : "Upload a PDF first to start chatting..."
+              !hasUpload
+                ? "Upload a PDF first to start chatting..."
+                : wsStatus !== "open"
+                ? "Reconnecting to server…"
+                : "Ask about risks, revenue, growth..."
             }
           />
           <button
             onClick={askQuestion}
-            disabled={loading || !question.trim() || !hasUpload}
+            disabled={loading || !question.trim() || !isReady}
             className="bg-white text-black p-2 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-200 transition shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">

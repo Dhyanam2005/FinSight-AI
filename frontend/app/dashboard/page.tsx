@@ -1,8 +1,92 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import RevenueChart from "@/components/RevenueChart";
 import MarginChart from "@/components/MarginChart";
+
+// ── Inline SVG icons (no extra dependencies) ─────────────────────────────────
+const RefreshIcon = () => (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+    <path d="M21 3v5h-5" />
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+    <path d="M8 16H3v5" />
+  </svg>
+);
+const ExportIcon = () => (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="12" y1="18" x2="12" y2="12" />
+    <polyline points="9 15 12 18 15 15" />
+  </svg>
+);
+const FileIcon = () => (
+  <svg className="w-5 h-5 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </svg>
+);
+const CheckCircleIcon = () => (
+  <svg className="w-4 h-4 text-green-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);
+const WarningIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+const AlertIcon = () => (
+  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+const ChartIcon = () => (
+  <svg className="w-10 h-10 text-zinc-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10" />
+    <line x1="12" y1="20" x2="12" y2="4" />
+    <line x1="6" y1="20" x2="6" y2="14" />
+    <line x1="2" y1="20" x2="22" y2="20" />
+  </svg>
+);
+const ForecastIcon = () => (
+  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+    <polyline points="16 7 22 7 22 13" />
+  </svg>
+);
+const ThesisIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 8v4l3 3" />
+    <path d="M9.5 9.5a5 5 0 0 1 7.43 6.43" />
+  </svg>
+);
+const ChevronUpIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+);
+const ChevronDownIcon = () => (
+  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+const RiskDot = ({ level }: { level: string }) => (
+  <span className={`w-2 h-2 rounded-full inline-block mr-1.5 ${
+    level === "High" ? "bg-red-400" : level === "Medium" ? "bg-yellow-400" : "bg-green-400"
+  }`} />
+);
 
 interface KPIData {
   total_companies: number;
@@ -58,6 +142,12 @@ interface UploadedFile {
   company: string;
   quarters: number;
   pages: number;
+}
+
+interface ComparisonPair {
+  company1: string;
+  company2: string;
+  comparison: string;
 }
 
 function ScoreBar({ label, value, color }: {
@@ -117,6 +207,8 @@ function SkeletonSection() {
 export default function DashboardPage() {
   const [kpis, setKpis] = useState<KPIData | null>(null);
   const [comparisonData, setComparisonData] = useState<ComparisonRow[]>([]);
+  const [comparisons, setComparisons] = useState<ComparisonPair[]>([]);
+  const [expandedPair, setExpandedPair] = useState<string | null>(null);
   const [trendData, setTrendData] = useState<Record<string, TrendPoint[]>>({});
   const [sentiments, setSentiments] = useState<SentimentData[]>([]);
   const [scores, setScores] = useState<ScoreData[]>([]);
@@ -146,6 +238,7 @@ export default function DashboardPage() {
       const data = await res.json();
       setKpis(data.kpis || null);
       setComparisonData(data.comparison_table || []);
+      setComparisons(data.comparisons || []);
       setTrendData(data.trend_data || {});
       setSentiments(data.sentiments || []);
       setScores(data.scores || []);
@@ -207,7 +300,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-[#212121] text-white flex flex-col items-center justify-center gap-4">
-        <p className="text-4xl">⚠️</p>
+        <WarningIcon className="w-10 h-10 text-yellow-500" />
         <p className="text-zinc-300 font-semibold">{error}</p>
         <button
           onClick={fetchDashboard}
@@ -233,7 +326,7 @@ export default function DashboardPage() {
           </a>
         </div>
         <div className="flex flex-col items-center justify-center h-[80vh] gap-4">
-          <p className="text-4xl">📊</p>
+          <ChartIcon />
           <p className="text-zinc-300 font-semibold">No documents uploaded yet</p>
           <p className="text-zinc-500 text-sm">Upload a financial PDF in the chat to see analysis here.</p>
           <a href="/"
@@ -256,12 +349,12 @@ export default function DashboardPage() {
             ← Chat
           </a>
           <button onClick={fetchDashboard}
-            className="text-sm text-zinc-400 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition">
-            🔄 Refresh
+            className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 px-3 py-1.5 rounded-lg transition">
+            <RefreshIcon /> Refresh
           </button>
           <button onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/export/pdf`, "_blank")}
-            className="text-sm bg-white text-black px-3 py-1.5 rounded-lg font-semibold hover:bg-zinc-200 transition">
-            📄 Export PDF
+            className="flex items-center gap-1.5 text-sm bg-white text-black px-3 py-1.5 rounded-lg font-semibold hover:bg-zinc-200 transition">
+            <ExportIcon /> Export PDF
           </button>
         </div>
       </div>
@@ -277,13 +370,13 @@ export default function DashboardPage() {
             {uploadedFiles.map((file, idx) => (
               <div key={idx}
                 className="bg-[#2f2f2f] border border-zinc-700 rounded-xl px-4 py-3 flex items-center gap-3">
-                <span className="text-xl shrink-0">📄</span>
+                <FileIcon />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-sm truncate text-white">{file.filename}</p>
                   <p className="text-zinc-400 text-xs">{file.company}</p>
                   <p className="text-zinc-500 text-xs">{file.quarters} quarters · {file.pages} pages</p>
                 </div>
-                <span className="text-green-400 text-sm shrink-0">✅</span>
+                <CheckCircleIcon />
               </div>
             ))}
           </div>
@@ -315,13 +408,13 @@ export default function DashboardPage() {
         {anomalies.length > 0 && (
           <section>
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-              🚨 Anomaly Detection
+                <span className="flex items-center gap-1.5"><AlertIcon /> Anomaly Detection</span>
             </h2>
             <div className="space-y-2">
               {anomalies.map((a, idx) => (
                 <div key={idx}
                   className="bg-red-900/20 border border-red-800 rounded-xl px-4 py-3 flex items-center gap-3 text-sm">
-                  <span className="text-red-400">⚠️</span>
+                  <WarningIcon className="w-4 h-4 text-red-400 shrink-0" />
                   <span className="font-semibold text-red-300">{a.company}</span>
                   <span className="text-zinc-500">·</span>
                   <span className="text-zinc-300">{a.quarter}</span>
@@ -363,8 +456,8 @@ export default function DashboardPage() {
 
                   {(s.predicted_revenue_growth !== null || s.predicted_operating_margin !== null) && (
                     <div className="mt-4 pt-3 border-t border-zinc-700">
-                      <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2">
-                        🔮 Next Quarter Forecast
+                      <p className="text-xs text-zinc-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+                        <ForecastIcon /> Next Quarter Forecast
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         {s.predicted_revenue_growth !== null && (
@@ -413,7 +506,7 @@ export default function DashboardPage() {
                   <th className="text-left px-4 py-3 text-zinc-400 font-medium">Quarter</th>
                   <th className="text-left px-4 py-3 text-zinc-400 font-medium">Rev Growth</th>
                   <th className="text-left px-4 py-3 text-zinc-400 font-medium">Op Margin</th>
-                  <th className="text-left px-4 py-3 text-zinc-400 font-medium">Net Income</th>
+                  <th className="text-left px-4 py-3 text-zinc-400 font-medium">Net Inc Growth</th>
                   <th className="text-left px-4 py-3 text-zinc-400 font-medium">Risk</th>
                 </tr>
               </thead>
@@ -442,7 +535,7 @@ export default function DashboardPage() {
                         <td className="px-4 py-3 text-zinc-300">{row.net_income_growth}%</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${riskBadge(riskLevel)}`}>
-                            {riskLevel === "High" ? "🔴" : riskLevel === "Medium" ? "🟡" : "🟢"} {riskLevel}
+                            <RiskDot level={riskLevel} />{riskLevel}
                           </span>
                         </td>
                       </tr>
@@ -453,6 +546,55 @@ export default function DashboardPage() {
             </table>
           </div>
         </section>
+
+        {/* ANALYST COMPARISONS */}
+        {comparisons.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+              AI Analyst Comparisons ({comparisons.length} pair{comparisons.length > 1 ? "s" : ""})
+            </h2>
+            <div className="space-y-3">
+              {comparisons.map((pair, idx) => {
+                const key = `${pair.company1}-${pair.company2}`;
+                const isOpen = expandedPair === key;
+                return (
+                  <div key={idx} className="bg-[#2f2f2f] border border-zinc-700 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setExpandedPair(isOpen ? null : key)}
+                      className="w-full flex items-center justify-between px-5 py-4 hover:bg-zinc-800/50 transition text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-white font-semibold">{pair.company1}</span>
+                        <span className="text-zinc-500 text-sm">vs</span>
+                        <span className="text-white font-semibold">{pair.company2}</span>
+                      </div>
+                      <span className="text-zinc-500 flex items-center gap-1 text-xs">
+                        {isOpen ? <><ChevronUpIcon /> Collapse</> : <><ChevronDownIcon /> Expand</>}
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-5 pb-5 border-t border-zinc-700 pt-4 text-sm text-zinc-300 leading-relaxed prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown
+                          components={{
+                            h1: ({ children }) => <h1 className="text-lg font-bold text-white mb-2">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-base font-bold text-white mb-2 mt-4">{children}</h2>,
+                            strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+                            p: ({ children }) => <p className="mb-3 text-zinc-300">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
+                            li: ({ children }) => <li className="text-zinc-300">{children}</li>,
+                            hr: () => <hr className="border-zinc-700 my-4" />,
+                          }}
+                        >
+                          {pair.comparison}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* SENTIMENT */}
         {sentiments.length > 0 && (
@@ -538,7 +680,7 @@ export default function DashboardPage() {
                     <div className="flex gap-2">
                       {latest.risk && (
                         <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${riskBadge(latest.risk.level)}`}>
-                          {latest.risk.level === "High" ? "🔴" : latest.risk.level === "Medium" ? "🟡" : "🟢"} {latest.risk.level}
+                          <RiskDot level={latest.risk.level} />{latest.risk.level}
                         </span>
                       )}
                     </div>
@@ -556,11 +698,30 @@ export default function DashboardPage() {
                     disabled={thesisLoading[company]}
                     className="w-full py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm font-medium transition disabled:opacity-50 text-white"
                   >
-                    {thesisLoading[company] ? "Generating..." : "🧠 Generate Investment Thesis"}
+                    {thesisLoading[company] ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                        Generating...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2"><ThesisIcon /> Generate Investment Thesis</span>
+                    )}
                   </button>
                   {thesis[company] && (
-                    <div className="mt-3 bg-zinc-800 rounded-lg p-4 text-zinc-200 text-sm whitespace-pre-wrap leading-relaxed">
-                      {thesis[company]}
+                    <div className="mt-3 bg-zinc-800 rounded-lg p-4 text-sm prose prose-invert prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => <h1 className="text-base font-bold text-white mb-2">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-sm font-bold text-white mb-1 mt-3">{children}</h2>,
+                          strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+                          p: ({ children }) => <p className="mb-2 text-zinc-300 leading-relaxed">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-0.5">{children}</ul>,
+                          li: ({ children }) => <li className="text-zinc-300">{children}</li>,
+                          hr: () => <hr className="border-zinc-700 my-3" />,
+                        }}
+                      >
+                        {thesis[company]}
+                      </ReactMarkdown>
                     </div>
                   )}
                 </div>

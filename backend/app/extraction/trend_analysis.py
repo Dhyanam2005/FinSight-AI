@@ -4,13 +4,25 @@ import numpy as np
 
 def _quarter_to_index(quarter: str) -> int:
     """Convert Q1 2024 → sortable integer for regression"""
-    try:
-        parts = quarter.strip().split()
-        q = int(parts[0].replace("Q", ""))
-        y = int(parts[1])
-        return (y * 4) + q
-    except:
-        return 0
+    import re as _re
+    s = quarter.strip().upper()
+
+    # Standard: Q1 2024, Q2-2024, Q3_2024
+    m = _re.match(r"Q([1-4])[\s\-_]*(20\d{2})", s)
+    if m:
+        return int(m.group(2)) * 4 + int(m.group(1))
+
+    # Fiscal year: FY2024, FY 2024
+    m = _re.match(r"FY[\s\-_]*(20\d{2})", s)
+    if m:
+        return int(m.group(1)) * 4 + 4  # treat FY as Q4 of that year
+
+    # Year only: 2024
+    m = _re.match(r"(20\d{2})", s)
+    if m:
+        return int(m.group(1)) * 4
+
+    return 999999  # place unknowns at the end rather than the beginning
 
 
 def _forecast_next_quarters(values: list, quarters: list, n: int = 3):

@@ -1,14 +1,24 @@
 from transformers import pipeline
 from collections import Counter
 
-# Load FinBERT model
-finbert_pipeline = pipeline(
-    "sentiment-analysis",
-    model="ProsusAI/finbert"
-)
+_finbert_pipeline = None
+
+
+def _get_finbert():
+    global _finbert_pipeline
+    if _finbert_pipeline is None:
+        print("Loading FinBERT model...")
+        _finbert_pipeline = pipeline(
+            "sentiment-analysis",
+            model="ProsusAI/finbert"
+        )
+        print("FinBERT model loaded.")
+    return _finbert_pipeline
 
 
 def analyze_sentiment(text: str) -> dict:
+
+    finbert = _get_finbert()
 
     # Split into word-based chunks (400 words = safe under 512 tokens)
     words = text.split()
@@ -25,7 +35,7 @@ def analyze_sentiment(text: str) -> dict:
         if not chunk.strip():
             continue
         try:
-            result = finbert_pipeline(
+            result = finbert(
                 chunk,
                 truncation=True,
                 max_length=512

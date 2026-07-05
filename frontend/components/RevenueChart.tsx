@@ -117,9 +117,6 @@ export default function RevenueChart({ data }: any) {
     return row
   })
 
-  console.log("Companies:", companies)
-  console.log("Pivoted:", pivoted)
-
   return (
     <ResponsiveContainer width="100%" height={320}>
       <LineChart data={pivoted}>
