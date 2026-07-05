@@ -12,9 +12,31 @@
 
 Upload any earnings report or annual report PDF and ask questions in plain English — FinSight AI extracts structured financials, detects sentiment, surfaces anomalies, and generates analyst-grade investment theses, all grounded in the actual document.
 
-[Features](#features) · [Architecture](#architecture) · [RAG Pipeline](#rag-pipeline) · [Getting Started](#getting-started) · [API Reference](#api-reference)
+[Features](#features) · [Demo](#demo) · [Architecture](#architecture) · [RAG Pipeline](#rag-pipeline) · [Getting Started](#getting-started) · [API Reference](#api-reference)
 
 </div>
+
+---
+
+## Demo
+
+### Chat — RAG Q&A with citations and streaming
+
+![Chat interface showing hybrid RAG response with source citations](assets/screenshots/chat.png)
+
+### Dashboard — Financial health scores, trend charts, anomaly detection
+
+![Dashboard showing revenue trend chart, health scores, and company comparison table](assets/screenshots/dashboard.png)
+
+### Multi-company Comparison
+
+![AI analyst comparison between two companies with bull and bear case breakdown](assets/screenshots/comparison.png)
+
+### Investment Thesis Generation
+
+![Generated investment thesis with One-Line Verdict, Growth Drivers, and Key Risks](assets/screenshots/thesis.png)
+
+> **To add your own screenshots:** save PNG files to `assets/screenshots/` using the filenames above, then commit and push. They will appear here automatically on GitHub.
 
 ---
 
