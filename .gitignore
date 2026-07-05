@@ -1,5 +1,6 @@
 # ─── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -12,8 +13,8 @@ venv/
 env/
 *.egg
 
-# Uploaded PDFs — do not commit user data to the repo
-backend/uploads/*.pdf
+# Uploaded files — do not commit user data to the repo
+backend/uploads/
 
 # ─── Node / Next.js ──────────────────────────────────────────────────────────
 # Logs
